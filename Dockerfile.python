@@ -1,0 +1,27 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Install MySQL client libs for mysqlclient
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc default-libmysqlclient-dev pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python deps
+COPY sap-mes-cmsd-twin/requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy cmsd-pydantic library (needed by CMSD twin service)
+COPY cmsd-pydantic-master/ ./cmsd-pydantic-master/
+RUN pip install --no-cache-dir ./cmsd-pydantic-master/
+
+# Copy the sap-mes-cmsd-twin project source
+COPY sap-mes-cmsd-twin/ ./sap-mes-cmsd-twin/
+
+# Set working directory to the project root so imports work
+WORKDIR /app/sap-mes-cmsd-twin
+
+# Add parent dirs to PYTHONPATH for cmsd-pydantic and shared config
+ENV PYTHONPATH="/app:/app/sap-mes-cmsd-twin:${PYTHONPATH}"
+
+EXPOSE 8000 8001 8002

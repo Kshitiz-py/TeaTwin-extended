@@ -1,0 +1,99 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: factory-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: factory_digital_twin
+      MYSQL_USER: factory_user
+      MYSQL_PASSWORD: factory_pass
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./database/init.sql:/docker-entrypoint-initdb.d/01-init.sql
+      - ./database/seed_data.sql:/docker-entrypoint-initdb.d/02-seed.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpass"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  mock-sap-api:
+    build:
+      context: ..
+      dockerfile: sap-mes-cmsd-twin/Dockerfile.python
+    container_name: mock-sap-api
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_PORT: "3306"
+      MYSQL_USER: factory_user
+      MYSQL_PASSWORD: factory_pass
+      MYSQL_DATABASE: factory_digital_twin
+    depends_on:
+      mysql:
+        condition: service_healthy
+    command: ["python", "-m", "uvicorn", "mock_sap_api.main:app", "--host", "0.0.0.0", "--port", "8001", "--reload"]
+
+  mock-mes-api:
+    build:
+      context: ..
+      dockerfile: sap-mes-cmsd-twin/Dockerfile.python
+    container_name: mock-mes-api
+    restart: unless-stopped
+    ports:
+      - "8002:8002"
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_PORT: "3306"
+      MYSQL_USER: factory_user
+      MYSQL_PASSWORD: factory_pass
+      MYSQL_DATABASE: factory_digital_twin
+    depends_on:
+      mysql:
+        condition: service_healthy
+    command: ["python", "-m", "uvicorn", "mock_mes_api.main:app", "--host", "0.0.0.0", "--port", "8002", "--reload"]
+
+  cmsd-twin-service:
+    build:
+      context: ..
+      dockerfile: sap-mes-cmsd-twin/Dockerfile.python
+    container_name: cmsd-twin-service
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_PORT: "3306"
+      MYSQL_USER: factory_user
+      MYSQL_PASSWORD: factory_pass
+      MYSQL_DATABASE: factory_digital_twin
+      SAP_API_URL: http://mock-sap-api:8001/api/sap/v1
+      MES_API_URL: http://mock-mes-api:8002/api/mes/v1
+      POLL_INTERVAL: "10"
+    depends_on:
+      mock-sap-api:
+        condition: service_started
+      mock-mes-api:
+        condition: service_started
+    command: ["python", "-m", "uvicorn", "cmsd_twin_service.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+  web-dashboard:
+    build:
+      context: ./web_dashboard
+      dockerfile: Dockerfile.node
+    container_name: cmsd-dashboard
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    depends_on:
+      - cmsd-twin-service
+    environment:
+      VITE_CMSD_API_URL: http://cmsd-twin-service:8000/api/cmsd/v1
+
+volumes:
+  mysql_data:
