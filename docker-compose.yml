@@ -37,7 +37,7 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
-    command: ["python", "-m", "uvicorn", "mock_sap_api.main:app", "--host", "0.0.0.0", "--port", "8001", "--reload"]
+    command: ["python", "-m", "uvicorn", "mock_sap_api.main:app", "--host", "0.0.0.0", "--port", "8001"]
 
   mock-mes-api:
     build:
@@ -56,7 +56,53 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
-    command: ["python", "-m", "uvicorn", "mock_mes_api.main:app", "--host", "0.0.0.0", "--port", "8002", "--reload"]
+    command: ["python", "-m", "uvicorn", "mock_mes_api.main:app", "--host", "0.0.0.0", "--port", "8002"]
+
+  ai-agent:
+    build:
+      context: ..
+      dockerfile: sap-mes-cmsd-twin/Dockerfile.python
+    container_name: ai-agent
+    restart: unless-stopped
+    ports:
+      - "8003:8003"
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_PORT: "3306"
+      MYSQL_USER: factory_user
+      MYSQL_PASSWORD: factory_pass
+      MYSQL_DATABASE: factory_digital_twin
+      SAP_API_URL: http://mock-sap-api:8001/api/sap/v1
+      MES_API_URL: http://mock-mes-api:8002/api/mes/v1
+      CMSD_TWIN_URL: http://cmsd-twin-service:8000/api/cmsd/v1
+      CHROMA_PERSIST_DIR: /app/chromadb_data
+      # Disable auto-index on startup to prevent hanging on Ollama
+      AUTO_INDEX_ON_STARTUP: "0"
+      # Path where agent can find the CMSD twin codebase for code generation
+      CMSD_TWIN_REPO_PATH: /app/git-repo
+    volumes:
+      - chromadb_data:/app/chromadb_data
+      - ./ai_agent/.agent-reports:/app/sap-mes-cmsd-twin/ai_agent/.agent-reports
+      # Shared volume approach: mount repo .git for branch/commit operations
+      - ../.git:/app/git-repo/.git:rw
+      # Mount CMSD twin service source writable — agent modifies this code
+      - ./cmsd_twin_service:/app/git-repo/cmsd_twin_service
+      # Mount shared config writable (agent may update mapping configs)
+      - ./shared:/app/git-repo/shared
+      # NOTE: ai_agent source is intentionally NOT mounted in the git-repo.
+      # The agent MUST NOT be able to modify its own source code during code generation.
+      # Only cmsd_twin_service and shared config are writable targets.
+    depends_on:
+      mock-sap-api:
+        condition: service_started
+      mock-mes-api:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/api/agent/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: ["python", "-m", "uvicorn", "ai_agent.main:app", "--host", "0.0.0.0", "--port", "8003"]
 
   cmsd-twin-service:
     build:
@@ -80,7 +126,19 @@ services:
         condition: service_started
       mock-mes-api:
         condition: service_started
-    command: ["python", "-m", "uvicorn", "cmsd_twin_service.main:app", "--host", "0.0.0.0", "--port", "8000"]
+      ai-agent:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/cmsd/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      # Hot-reload: mount writable source dirs so agent changes are picked up
+      - ./cmsd_twin_service:/app/sap-mes-cmsd-twin/cmsd_twin_service
+      - ./shared:/app/sap-mes-cmsd-twin/shared
+      - ./ai_agent/config.py:/app/sap-mes-cmsd-twin/ai_agent/config.py
+    command: ["python", "-m", "uvicorn", "cmsd_twin_service.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 
   web-dashboard:
     build:
@@ -92,8 +150,13 @@ services:
       - "5173:5173"
     depends_on:
       - cmsd-twin-service
+      - ai-agent
+    volumes:
+      - ./web_dashboard/src:/app/src
     environment:
       VITE_CMSD_API_URL: http://cmsd-twin-service:8000/api/cmsd/v1
+      VITE_AGENT_API_URL: http://ai-agent:8003/api/agent/v1
 
 volumes:
   mysql_data:
+  chromadb_data:
