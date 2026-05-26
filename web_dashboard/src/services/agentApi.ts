@@ -86,6 +86,7 @@ export interface FetchedPayload {
   label: string;
   url: string;
   status: 'success' | 'error';
+  error_message?: string;
   status_code: number | null;
   size_bytes: number;
   raw_payload: any;

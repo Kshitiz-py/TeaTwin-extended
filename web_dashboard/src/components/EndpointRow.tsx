@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { SourceData } from './SourceCard';
 
 export interface EndpointRowData {
@@ -9,31 +8,21 @@ export interface EndpointRowData {
 }
 
 interface Props {
+  data: EndpointRowData;
   sources: SourceData[];
-  onFire: (data: EndpointRowData) => void;
+  onChange: (data: EndpointRowData) => void;
+  onRemove: () => void;
+  onFire: () => void;
   loading: boolean;
+  canRemove: boolean;
 }
 
-export default function EndpointRow({ sources, onFire, loading }: Props) {
-  const [sourceId, setSourceId] = useState(sources[0]?.id || '');
-  const [endpoint, setEndpoint] = useState('/resources');
-  const [method, setMethod] = useState('GET');
-  const [label, setLabel] = useState('');
-
-  const canFire = sourceId && endpoint.trim() && !loading;
-
-  const handleFire = () => {
-    if (!canFire) return;
-    onFire({
-      source_id: sourceId,
-      endpoint: endpoint.trim(),
-      method,
-      label: label.trim() || endpoint.trim(),
-    });
-  };
+export default function EndpointRow({ data, sources, onChange, onRemove, onFire, loading, canRemove }: Props) {
+  const patch = (p: Partial<EndpointRowData>) => onChange({ ...data, ...p });
+  const canFire = data.source_id && data.endpoint.trim() && !loading;
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') handleFire();
+    if (e.key === 'Enter') onFire();
   };
 
   return (
@@ -46,13 +35,11 @@ export default function EndpointRow({ sources, onFire, loading }: Props) {
       <div style={{ minWidth: '150px' }}>
         <label style={labelStyle}>Source</label>
         <select
-          value={sourceId}
-          onChange={e => setSourceId(e.target.value)}
+          value={data.source_id}
+          onChange={e => patch({ source_id: e.target.value })}
           style={selectStyle}
         >
-          {sources.length === 0 && (
-            <option value="">No sources</option>
-          )}
+          {sources.length === 0 && <option value="">No sources</option>}
           {sources.map(s => (
             <option key={s.id} value={s.id}>{s.name}</option>
           ))}
@@ -63,8 +50,8 @@ export default function EndpointRow({ sources, onFire, loading }: Props) {
       <div style={{ minWidth: '90px' }}>
         <label style={labelStyle}>Method</label>
         <select
-          value={method}
-          onChange={e => setMethod(e.target.value)}
+          value={data.method}
+          onChange={e => patch({ method: e.target.value })}
           style={selectStyle}
         >
           <option value="GET">GET</option>
@@ -76,8 +63,8 @@ export default function EndpointRow({ sources, onFire, loading }: Props) {
       <div style={{ flex: 2, minWidth: '200px' }}>
         <label style={labelStyle}>Endpoint URL</label>
         <input
-          value={endpoint}
-          onChange={e => setEndpoint(e.target.value)}
+          value={data.endpoint}
+          onChange={e => patch({ endpoint: e.target.value })}
           onKeyDown={handleKeyDown}
           placeholder="/resources"
           style={inputStyle}
@@ -88,8 +75,8 @@ export default function EndpointRow({ sources, onFire, loading }: Props) {
       <div style={{ flex: 1, minWidth: '120px' }}>
         <label style={labelStyle}>Label (optional)</label>
         <input
-          value={label}
-          onChange={e => setLabel(e.target.value)}
+          value={data.label}
+          onChange={e => patch({ label: e.target.value })}
           onKeyDown={handleKeyDown}
           placeholder="e.g. SAP Resources"
           style={inputStyle}
@@ -98,10 +85,10 @@ export default function EndpointRow({ sources, onFire, loading }: Props) {
 
       {/* Fire button */}
       <button
-        onClick={handleFire}
+        onClick={onFire}
         disabled={!canFire}
         style={{
-          padding: '8px 20px', borderRadius: '6px', border: 'none',
+          padding: '8px 16px', borderRadius: '6px', border: 'none',
           background: canFire ? '#3b82f6' : '#334155',
           color: canFire ? '#fff' : '#64748b',
           cursor: canFire ? 'pointer' : 'not-allowed',
@@ -110,14 +97,22 @@ export default function EndpointRow({ sources, onFire, loading }: Props) {
           whiteSpace: 'nowrap', height: '36px',
         }}
       >
-        {loading ? (
-          <>
-            <Spinner />
-            Fetching...
-          </>
-        ) : (
-          <>Fire</>
-        )}
+        {loading ? <><Spinner /> Fetching...</> : <>Fire</>}
+      </button>
+
+      {/* Remove button */}
+      <button
+        onClick={onRemove}
+        disabled={!canRemove}
+        title={canRemove ? 'Remove this endpoint' : 'Cannot remove the last endpoint'}
+        style={{
+          padding: '6px 10px', borderRadius: '6px', border: '1px solid #475569',
+          background: 'transparent', color: canRemove ? '#f87171' : '#475569',
+          cursor: canRemove ? 'pointer' : 'not-allowed',
+          fontSize: '16px', fontWeight: 700, height: '36px',
+        }}
+      >
+        ✕
       </button>
     </div>
   );

@@ -3,6 +3,7 @@ import { FetchedPayload } from '../services/agentApi';
 
 interface Props {
   payload: FetchedPayload;
+  onRetry?: () => void;
 }
 
 const COLORS: Record<string, string> = {
@@ -19,7 +20,7 @@ function isTruncated(raw: any): boolean {
   return raw && typeof raw === 'object' && raw._truncated === true;
 }
 
-export default function PayloadViewer({ payload }: Props) {
+export default function PayloadViewer({ payload, onRetry }: Props) {
   const [collapsed, setCollapsed] = useState(false);
 
   if (payload.status === 'error') {
@@ -29,17 +30,34 @@ export default function PayloadViewer({ payload }: Props) {
         borderRadius: '8px', border: '1px solid #ef4444', color: '#fca5a5',
         fontSize: '13px',
       }}>
-        <strong>Error</strong>
-        {payload.url && <span style={{ marginLeft: '8px', opacity: 0.8 }}>{payload.url}</span>}
-        {payload.status_code && (
-          <span style={{ marginLeft: '8px', opacity: 0.8 }}>HTTP {payload.status_code}</span>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+          <div>
+            <strong>Error</strong>
+            <span style={{ marginLeft: '8px', fontFamily: 'monospace', color: '#fca5a5', opacity: 0.9 }}>
+              {payload.label || payload.endpoint}
+            </span>
+            {payload.status_code && (
+              <span style={{ marginLeft: '8px', opacity: 0.8 }}>HTTP {payload.status_code}</span>
+            )}
+          </div>
+          {onRetry && (
+            <button
+              onClick={onRetry}
+              style={{
+                padding: '4px 14px', borderRadius: '4px', border: '1px solid #ef4444',
+                background: '#991b1b', color: '#fca5a5', cursor: 'pointer',
+                fontSize: '12px', fontWeight: 600, whiteSpace: 'nowrap',
+              }}
+            >
+              Retry
+            </button>
+          )}
+        </div>
+        {payload.error_message && (
+          <div style={{ marginTop: '6px', fontSize: '12px', opacity: 0.85 }}>
+            {payload.error_message}
+          </div>
         )}
-        <pre style={{
-          margin: '8px 0 0', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-          fontSize: '12px', color: '#fca5a5', opacity: 0.9,
-        }}>
-          {JSON.stringify(payload.raw_payload, null, 2)}
-        </pre>
       </div>
     );
   }
