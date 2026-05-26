@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
-import EndpointRow, { EndpointRowData } from './EndpointRow';
+import EndpointRow, { EndpointRowData, PayloadStatus } from './EndpointRow';
 import PayloadViewer from './PayloadViewer';
+import MappingTable from './MappingTable';
+import EntityPreview from './EntityPreview';
 import { agentApi, FetchedPayload } from '../services/agentApi';
 import { SourceData } from './SourceCard';
 
@@ -13,14 +15,24 @@ function defaultEndpoint(sources: SourceData[]): EndpointRowData {
   };
 }
 
+type Phase = 'fetch' | 'analyzing' | 'map';
+
 export default function MappingWizard() {
   const [sources, setSources] = useState<SourceData[]>([]);
   const [sourcesLoading, setSourcesLoading] = useState(true);
   const [sourceError, setSourceError] = useState<string | null>(null);
   const [endpoints, setEndpoints] = useState<EndpointRowData[]>([]);
   const [payloads, setPayloads] = useState<(FetchedPayload | null)[]>([]);
-  const [loading, setLoading] = useState<Set<number>>(new Set()); // which indices are loading
+  const [loading, setLoading] = useState<Set<number>>(new Set());
   const [fireAllLoading, setFireAllLoading] = useState(false);
+
+  // Phase 2 state
+  const [approvedIndices, setApprovedIndices] = useState<Set<number>>(new Set());
+  const [phase, setPhase] = useState<Phase>('fetch');
+  const [dataPointName, setDataPointName] = useState('');
+  const [cmsdEntity, setCmsdEntity] = useState('Resource');
+  const [mappingResult, setMappingResult] = useState<any>(null);
+  const [analyzeError, setAnalyzeError] = useState<string | null>(null);
 
   useEffect(() => {
     agentApi.getSources()
@@ -47,6 +59,14 @@ export default function MappingWizard() {
     if (endpoints.length <= 1) return;
     setEndpoints(prev => prev.filter((_, idx) => idx !== i));
     setPayloads(prev => prev.filter((_, idx) => idx !== i));
+    setApprovedIndices(prev => {
+      const next = new Set(prev);
+      next.delete(i);
+      // Re-index indices above the removed one
+      const adjusted = new Set<number>();
+      next.forEach(idx => adjusted.add(idx > i ? idx - 1 : idx));
+      return adjusted;
+    });
   };
 
   const updateEndpoint = (i: number, data: EndpointRowData) => {
@@ -68,6 +88,8 @@ export default function MappingWizard() {
         label: ep.label || ep.endpoint,
       }]);
       setPayloads(prev => prev.map((p, idx) => idx === i ? result.payloads[0] : p));
+      // Clear approval for this row on re-fetch
+      setApprovedIndices(prev => { const next = new Set(prev); next.delete(i); return next; });
     } catch (e: any) {
       setPayloads(prev => prev.map((p, idx) => idx === i ? {
         endpoint: ep.endpoint,
@@ -80,6 +102,7 @@ export default function MappingWizard() {
         size_bytes: 0,
         raw_payload: null,
       } : p));
+      setApprovedIndices(prev => { const next = new Set(prev); next.delete(i); return next; });
     } finally {
       setLoading(prev => { const next = new Set(prev); next.delete(i); return next; });
     }
@@ -98,10 +121,9 @@ export default function MappingWizard() {
           label: ep.label || ep.endpoint,
         }))
       );
-      // Map results back by index (response order matches request order)
       setPayloads(result.payloads);
+      setApprovedIndices(new Set()); // clear all approvals on fire-all
     } catch (e: any) {
-      // If the whole batch call failed, mark all as error
       setPayloads(endpoints.map(ep => ({
         endpoint: ep.endpoint,
         source_id: ep.source_id,
@@ -113,12 +135,64 @@ export default function MappingWizard() {
         size_bytes: 0,
         raw_payload: null,
       })));
+      setApprovedIndices(new Set());
     } finally {
       setFireAllLoading(false);
     }
   };
 
+  // ── Approve toggle ────────────────────────────────────────
+
+  const toggleApprove = (i: number) => {
+    setApprovedIndices(prev => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i);
+      else next.add(i);
+      return next;
+    });
+  };
+
+  // ── Approve & Map ─────────────────────────────────────────
+
+  const approveAndMap = async () => {
+    const approvedPayloads = Array.from(approvedIndices).map(i => {
+      const ep = endpoints[i];
+      const pl = payloads[i];
+      return {
+        endpoint: ep.endpoint,
+        source_id: ep.source_id,
+        label: ep.label || ep.endpoint,
+        raw_payload: pl?.raw_payload ?? null,
+      };
+    });
+
+    setPhase('analyzing');
+    setAnalyzeError(null);
+    try {
+      const result = await agentApi.analyzeMapping({
+        data_point_name: dataPointName || 'Untitled Data Point',
+        cmsd_entity: cmsdEntity,
+        approved_payloads: approvedPayloads,
+      });
+      setMappingResult(result);
+      setPhase('map');
+    } catch (e: any) {
+      setAnalyzeError(e.message || 'Analysis failed');
+      setPhase('fetch');
+    }
+  };
+
+  // ── Helpers ───────────────────────────────────────────────
+
+  const getPayloadStatus = (i: number): PayloadStatus => {
+    const pl = payloads[i];
+    if (!pl) return 'none';
+    return pl.status === 'success' ? 'success' : 'error';
+  };
+
   const isLoadingAny = loading.size > 0 || fireAllLoading;
+  const approvedCount = approvedIndices.size;
+  const canApprove = approvedCount > 0 && !isLoadingAny;
 
   // ── Render ────────────────────────────────────────────────
 
@@ -131,7 +205,7 @@ export default function MappingWizard() {
           API Explorer
         </h2>
         <p style={{ color: '#94a3b8', margin: 0, fontSize: '13px' }}>
-          Add endpoints, fire individually or all at once. Partial success is supported.
+          Add endpoints, fire individually or all at once. Approve payloads to map them to CMSD entities.
         </p>
       </div>
 
@@ -162,81 +236,295 @@ export default function MappingWizard() {
         </div>
       ) : (
         <>
-          {/* Empty state */}
-          {endpoints.length === 0 && (
+          {/* ── Phase 1: Fetch ──────────────────────────────── */}
+          {(phase === 'fetch' || phase === 'analyzing') && (
+            <>
+              {/* Empty state */}
+              {endpoints.length === 0 && (
+                <div style={{
+                  padding: '32px', textAlign: 'center', background: '#1e293b',
+                  borderRadius: '8px', border: '1px dashed #475569', color: '#94a3b8',
+                  fontSize: '13px', marginBottom: '12px',
+                }}>
+                  Add at least one endpoint to begin.
+                </div>
+              )}
+
+              {/* Endpoint rows */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {endpoints.map((ep, i) => (
+                  <div key={i}>
+                    <EndpointRow
+                      data={ep}
+                      sources={sources}
+                      onChange={(d) => updateEndpoint(i, d)}
+                      onRemove={() => removeEndpoint(i)}
+                      onFire={() => fireSingle(i)}
+                      loading={loading.has(i)}
+                      canRemove={endpoints.length > 1}
+                      approved={approvedIndices.has(i)}
+                      onApproveChange={() => toggleApprove(i)}
+                      payloadStatus={getPayloadStatus(i)}
+                    />
+                    {payloads[i] && (
+                      <PayloadViewer
+                        payload={payloads[i]}
+                        onRetry={() => fireSingle(i)}
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Add / Fire All buttons */}
+              <div style={{
+                display: 'flex', gap: '10px', marginTop: '14px',
+                paddingTop: '14px', borderTop: '1px solid #334155',
+                alignItems: 'center',
+              }}>
+                <button
+                  onClick={addEndpoint}
+                  disabled={isLoadingAny}
+                  style={{
+                    padding: '8px 18px', borderRadius: '6px',
+                    border: '1px dashed #475569', background: '#1e3a5f',
+                    color: isLoadingAny ? '#64748b' : '#93c5fd',
+                    cursor: isLoadingAny ? 'not-allowed' : 'pointer',
+                    fontSize: '13px', fontWeight: 600,
+                  }}
+                >
+                  + Add Endpoint
+                </button>
+
+                <button
+                  onClick={fireAll}
+                  disabled={endpoints.length === 0 || isLoadingAny}
+                  style={{
+                    padding: '10px 28px', borderRadius: '6px', border: 'none',
+                    background: endpoints.length === 0 || isLoadingAny ? '#334155' : '#7c3aed',
+                    color: endpoints.length === 0 || isLoadingAny ? '#64748b' : '#fff',
+                    cursor: endpoints.length === 0 || isLoadingAny ? 'not-allowed' : 'pointer',
+                    fontSize: '14px', fontWeight: 700,
+                    display: 'flex', alignItems: 'center', gap: '8px',
+                  }}
+                >
+                  {fireAllLoading ? (
+                    <>⏳ Fetching {endpoints.length} endpoint{endpoints.length !== 1 ? 's' : ''}...</>
+                  ) : (
+                    <>🚀 Fire All ({endpoints.length})</>
+                  )}
+                </button>
+              </div>
+
+              {/* ── Approve & Map section ───────────────────── */}
+              <div style={{
+                marginTop: '20px', paddingTop: '18px',
+                borderTop: '2px solid #475569',
+              }}>
+                <div style={{
+                  display: 'flex', gap: '12px', alignItems: 'flex-end',
+                  flexWrap: 'wrap',
+                }}>
+                  <div style={{ minWidth: '180px' }}>
+                    <label style={labelStyle}>Data Point Name</label>
+                    <input
+                      value={dataPointName}
+                      onChange={e => setDataPointName(e.target.value)}
+                      placeholder="e.g. Factory Resources"
+                      style={inputStyle}
+                    />
+                  </div>
+                  <div style={{ minWidth: '160px' }}>
+                    <label style={labelStyle}>CMSD Entity</label>
+                    <select
+                      value={cmsdEntity}
+                      onChange={e => setCmsdEntity(e.target.value)}
+                      style={selectStyle}
+                    >
+                      {CMSD_ENTITIES.map(e => (
+                        <option key={e} value={e}>{e}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <button
+                    onClick={approveAndMap}
+                    disabled={!canApprove}
+                    style={{
+                      padding: '10px 28px', borderRadius: '6px', border: 'none',
+                      background: canApprove ? '#22c55e' : '#334155',
+                      color: canApprove ? '#fff' : '#64748b',
+                      cursor: canApprove ? 'pointer' : 'not-allowed',
+                      fontSize: '14px', fontWeight: 700,
+                      display: 'flex', alignItems: 'center', gap: '8px',
+                      whiteSpace: 'nowrap', height: '42px',
+                    }}
+                  >
+                    {approvedCount > 0
+                      ? `Approve ${approvedCount} Selected & Map`
+                      : 'Approve Selected & Map'}
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* ── Analyzing loading state ─────────────────────── */}
+          {phase === 'analyzing' && (
             <div style={{
-              padding: '32px', textAlign: 'center', background: '#1e293b',
-              borderRadius: '8px', border: '1px dashed #475569', color: '#94a3b8',
-              fontSize: '13px', marginBottom: '12px',
+              marginTop: '20px', padding: '24px', textAlign: 'center',
+              background: '#1e293b', borderRadius: '8px', border: '1px solid #334155',
+              color: '#93c5fd', fontSize: '14px',
             }}>
-              Add at least one endpoint to begin.
+              <SpinnerLarge />
+              <p style={{ marginTop: '12px' }}>Analyzing with RAG + LLM...</p>
+              <p style={{ fontSize: '12px', color: '#64748b' }}>
+                Retrieving CMSD context and generating field mapping
+              </p>
             </div>
           )}
 
-          {/* Endpoint rows */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            {endpoints.map((ep, i) => (
-              <div key={i}>
-                <EndpointRow
-                  data={ep}
-                  sources={sources}
-                  onChange={(d) => updateEndpoint(i, d)}
-                  onRemove={() => removeEndpoint(i)}
-                  onFire={() => fireSingle(i)}
-                  loading={loading.has(i)}
-                  canRemove={endpoints.length > 1}
-                />
-                {payloads[i] && (
-                  <PayloadViewer
-                    payload={payloads[i]}
-                    onRetry={() => fireSingle(i)}
-                  />
-                )}
-              </div>
-            ))}
-          </div>
+          {/* Analyze error */}
+          {analyzeError && phase === 'fetch' && (
+            <div style={{
+              marginTop: '12px', padding: '10px 16px', background: '#7f1d1d',
+              borderRadius: '8px', border: '1px solid #ef4444', color: '#fca5a5',
+              fontSize: '13px',
+            }}>
+              {analyzeError}
+            </div>
+          )}
 
-          {/* Action buttons */}
-          <div style={{
-            display: 'flex', gap: '10px', marginTop: '14px',
-            paddingTop: '14px', borderTop: '1px solid #334155',
-            alignItems: 'center',
-          }}>
-            <button
-              onClick={addEndpoint}
-              disabled={isLoadingAny}
-              style={{
-                padding: '8px 18px', borderRadius: '6px',
-                border: '1px dashed #475569', background: '#1e3a5f',
-                color: isLoadingAny ? '#64748b' : '#93c5fd',
-                cursor: isLoadingAny ? 'not-allowed' : 'pointer',
-                fontSize: '13px', fontWeight: 600,
-              }}
-            >
-              + Add Endpoint
-            </button>
+          {/* ── Phase 2: Map ────────────────────────────────── */}
+          {phase === 'map' && mappingResult && (
+            <div style={{ marginTop: '24px' }}>
+              {/* Back button */}
+              <button
+                onClick={() => { setPhase('fetch'); setAnalyzeError(null); }}
+                style={{
+                  padding: '6px 14px', borderRadius: '6px',
+                  border: '1px solid #475569', background: 'transparent',
+                  color: '#94a3b8', cursor: 'pointer', fontSize: '13px',
+                  marginBottom: '16px',
+                }}
+              >
+                &larr; Back to Endpoints
+              </button>
 
-            <button
-              onClick={fireAll}
-              disabled={endpoints.length === 0 || isLoadingAny}
-              style={{
-                padding: '10px 28px', borderRadius: '6px', border: 'none',
-                background: endpoints.length === 0 || isLoadingAny ? '#334155' : '#7c3aed',
-                color: endpoints.length === 0 || isLoadingAny ? '#64748b' : '#fff',
-                cursor: endpoints.length === 0 || isLoadingAny ? 'not-allowed' : 'pointer',
-                fontSize: '14px', fontWeight: 700,
-                display: 'flex', alignItems: 'center', gap: '8px',
-              }}
-            >
-              {fireAllLoading ? (
-                <>⏳ Fetching {endpoints.length} endpoint{endpoints.length !== 1 ? 's' : ''}...</>
+              {mappingResult.mapping?.error ? (
+                <div style={{
+                  padding: '16px 20px', background: '#7f1d1d', borderRadius: '8px',
+                  border: '1px solid #ef4444', marginBottom: '20px',
+                }}>
+                  <h3 style={{ color: '#fca5a5', margin: '0 0 4px', fontSize: '16px' }}>
+                    Mapping Failed
+                  </h3>
+                  <p style={{ color: '#fca5a5', margin: 0, fontSize: '13px' }}>
+                    {mappingResult.mapping.error}
+                  </p>
+                </div>
               ) : (
-                <>🚀 Fire All ({endpoints.length})</>
+                <div style={{
+                  padding: '16px 20px', background: '#1a3a2a', borderRadius: '8px',
+                  border: '1px solid #22c55e', marginBottom: '20px',
+                }}>
+                  <h3 style={{ color: '#bbf7d0', margin: '0 0 4px', fontSize: '16px' }}>
+                    Mapping Generated
+                  </h3>
+                  <p style={{ color: '#86efac', margin: 0, fontSize: '13px' }}>
+                    AI has proposed a mapping for <strong>{mappingResult.cmsd_entity || cmsdEntity}</strong>.
+                    Review the table and entity preview below.
+                  </p>
+                </div>
               )}
-            </button>
-          </div>
+
+              {/* Proposed mapping table */}
+              <MappingTable
+                mapping={mappingResult.mapping}
+                cmsdEntity={mappingResult.cmsd_entity || cmsdEntity}
+              />
+
+              {/* Entity preview */}
+              <EntityPreview
+                mapping={mappingResult.mapping}
+                cmsdEntity={mappingResult.cmsd_entity || cmsdEntity}
+                instances={mappingResult.mapping?.instances}
+              />
+
+              {/* Instances info */}
+              {mappingResult.mapping?.instances &&
+               (mappingResult.mapping.instances.count_path || mappingResult.mapping.instances.key_field) && (
+                <div style={{
+                  marginTop: '16px', padding: '12px 16px', background: '#1e293b',
+                  borderRadius: '8px', border: '1px solid #334155',
+                  color: '#e2e8f0', fontSize: '13px',
+                }}>
+                  <strong style={{ color: '#93c5fd' }}>Instances:</strong>{' '}
+                  {mappingResult.mapping.instances.count_path && (
+                    <>from <code style={{ color: '#f1f5f9', background: '#334155', padding: '1px 6px', borderRadius: '3px', fontSize: '12px' }}>{mappingResult.mapping.instances.count_path}</code></>
+                  )}
+                  {mappingResult.mapping.instances.count_path && mappingResult.mapping.instances.key_field && ', '}
+                  {mappingResult.mapping.instances.key_field && (
+                    <>keyed by <code style={{ color: '#f1f5f9', background: '#334155', padding: '1px 6px', borderRadius: '3px', fontSize: '12px' }}>{mappingResult.mapping.instances.key_field}</code></>
+                  )}
+                </div>
+              )}
+
+              {/* Unmapped fields warning */}
+              {mappingResult.mapping?.requires_manual_review && mappingResult.mapping?.unmapped_fields?.length > 0 && (
+                <div style={{
+                  marginTop: '16px', padding: '12px 16px', background: '#422006',
+                  borderRadius: '8px', border: '1px solid #f59e0b',
+                  color: '#fde68a', fontSize: '13px',
+                }}>
+                  <strong>{mappingResult.mapping.unmapped_fields.length} field{mappingResult.mapping.unmapped_fields.length !== 1 ? 's' : ''} unmapped:</strong>{' '}
+                  {mappingResult.mapping.unmapped_fields.join(', ')}. Manual review needed.
+                </div>
+              )}
+            </div>
+          )}
         </>
       )}
     </div>
   );
 }
+
+function SpinnerLarge() {
+  return (
+    <span style={{
+      display: 'inline-block', width: '32px', height: '32px',
+      border: '3px solid #334155', borderTopColor: '#93c5fd',
+      borderRadius: '50%', animation: 'spin 0.8s linear infinite',
+    }} />
+  );
+}
+
+// ── CMSD Entities ────────────────────────────────────────────
+
+const CMSD_ENTITIES = [
+  'Resource', 'ResourceClass', 'PartType', 'Part', 'BillOfMaterials',
+  'BOMComponent', 'ProcessPlan', 'Process', 'Order', 'OrderLine',
+  'Calendar', 'Shift', 'Break', 'Holiday', 'Connection',
+  'Job', 'InventoryItem', 'MaintenancePlan',
+];
+
+// ── Styles ───────────────────────────────────────────────────
+
+const labelStyle: React.CSSProperties = {
+  fontSize: '11px', color: '#94a3b8', display: 'block',
+  marginBottom: '4px', fontWeight: 500, textTransform: 'uppercase',
+  letterSpacing: '0.5px',
+};
+
+const inputStyle: React.CSSProperties = {
+  width: '100%', background: '#0f172a', border: '1px solid #334155',
+  borderRadius: '4px', padding: '6px 10px', color: '#f1f5f9',
+  fontSize: '13px', fontFamily: 'monospace', boxSizing: 'border-box',
+  height: '42px',
+};
+
+const selectStyle: React.CSSProperties = {
+  width: '100%', background: '#0f172a', border: '1px solid #334155',
+  borderRadius: '4px', padding: '6px 10px', color: '#f1f5f9',
+  fontSize: '13px', height: '42px', boxSizing: 'border-box',
+};

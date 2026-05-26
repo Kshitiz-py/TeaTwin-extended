@@ -7,6 +7,8 @@ export interface EndpointRowData {
   label: string;
 }
 
+export type PayloadStatus = 'none' | 'success' | 'error';
+
 interface Props {
   data: EndpointRowData;
   sources: SourceData[];
@@ -15,9 +17,12 @@ interface Props {
   onFire: () => void;
   loading: boolean;
   canRemove: boolean;
+  approved: boolean;
+  onApproveChange: (approved: boolean) => void;
+  payloadStatus: PayloadStatus;
 }
 
-export default function EndpointRow({ data, sources, onChange, onRemove, onFire, loading, canRemove }: Props) {
+export default function EndpointRow({ data, sources, onChange, onRemove, onFire, loading, canRemove, approved, onApproveChange, payloadStatus }: Props) {
   const patch = (p: Partial<EndpointRowData>) => onChange({ ...data, ...p });
   const canFire = data.source_id && data.endpoint.trim() && !loading;
 
@@ -99,6 +104,36 @@ export default function EndpointRow({ data, sources, onChange, onRemove, onFire,
       >
         {loading ? <><Spinner /> Fetching...</> : <>Fire</>}
       </button>
+
+      {/* Approve checkbox */}
+      <label
+        title={
+          payloadStatus === 'error' ? 'Cannot approve a failed fetch' :
+          payloadStatus === 'none' ? 'Fire this endpoint first' :
+          'Approve this payload for mapping'
+        }
+        style={{
+          display: 'flex', alignItems: 'center', gap: '6px',
+          padding: '6px 10px', borderRadius: '6px',
+          background: approved ? '#1a3a2a' : '#1e293b',
+          border: approved ? '1px solid #22c55e' : '1px solid #334155',
+          cursor: payloadStatus === 'success' ? 'pointer' : 'not-allowed',
+          opacity: payloadStatus === 'success' ? 1 : 0.45,
+          height: '36px', boxSizing: 'border-box',
+          userSelect: 'none',
+        }}
+      >
+        <input
+          type="checkbox"
+          checked={approved}
+          onChange={e => onApproveChange(e.target.checked)}
+          disabled={payloadStatus !== 'success'}
+          style={{ accentColor: '#22c55e', cursor: payloadStatus === 'success' ? 'pointer' : 'not-allowed' }}
+        />
+        <span style={{ fontSize: '12px', color: approved ? '#bbf7d0' : '#94a3b8', fontWeight: 500 }}>
+          Approve
+        </span>
+      </label>
 
       {/* Remove button */}
       <button

@@ -6,7 +6,12 @@ export default defineConfig({
   server: {
     port: 5173,
     host: '0.0.0.0',
+    watch: { usePolling: true },
     proxy: {
+      '/api/agent': {
+        target: 'http://ai-agent:8003',
+        changeOrigin: true,
+      },
       '/api': {
         target: 'http://cmsd-twin-service:8000',
         changeOrigin: true,

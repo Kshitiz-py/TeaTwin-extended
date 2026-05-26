@@ -43,6 +43,13 @@ class EndpointSpec(BaseModel):
     method: str = "GET"
     label: str = ""  # optional label e.g. "SAP Resources"
 
+class ApprovedPayload(BaseModel):
+    """Pre-fetched payload sent by the frontend for analysis."""
+    endpoint: str
+    source_id: str
+    label: str = ""
+    raw_payload: Any = None
+
 class MappingAnalyzeRequest(BaseModel):
     source_id: str = ""
     data_point_name: str
@@ -50,6 +57,7 @@ class MappingAnalyzeRequest(BaseModel):
     api_endpoint: str = ""
     endpoints: list[EndpointSpec] = []
     method: str = "GET"
+    approved_payloads: list[ApprovedPayload] = []
 
 class MappingChatRequest(BaseModel):
     data_point_name: str
@@ -287,62 +295,68 @@ async def get_rag_stats():
 @router.post("/mapping/analyze")
 async def analyze_mapping(request: MappingAnalyzeRequest):
     """
-    For a given data point: fetch live API payload(s) + propose field mapping.
-    Supports both single endpoint (legacy) and multi-endpoint analysis.
+    Propose field mapping for a given data point and CMSD entity.
+    Supports two modes:
+    1. Pre-fetched: frontend sends approved_payloads[] with raw_payload already fetched.
+    2. Live-fetch (legacy): backend fetches payloads from specified endpoints/source.
     Uses RAG retrieval + LLM reasoning.
-    Returns raw payloads for user inspection.
     """
     try:
-        # Determine if multi-endpoint or single
-        endpoints_to_fetch: list[dict] = []
-        if request.endpoints:
-            for ep in request.endpoints:
-                endpoints_to_fetch.append({
-                    "source_id": ep.source_id,
-                    "endpoint": ep.endpoint,
-                    "method": ep.method,
-                    "label": ep.label or ep.endpoint,
+        payload_analyses: list[dict] = []
+        all_endpoints_str: list[str] = []
+
+        if request.approved_payloads:
+            # ── Mode 1: Pre-fetched payloads from Phase 1 approval ──
+            for ap in request.approved_payloads:
+                if ap.raw_payload is None:
+                    continue
+                payload_analysis = api_explorer.analyze_payload(ap.raw_payload)
+                payload_analyses.append({
+                    "endpoint": ap.endpoint,
+                    "source_label": ap.label or ap.endpoint,
+                    "analysis": payload_analysis,
+                    "raw_payload": ap.raw_payload,
                 })
-        elif request.source_id and request.api_endpoint:
-            endpoints_to_fetch.append({
-                "source_id": request.source_id,
-                "endpoint": request.api_endpoint,
-                "method": request.method,
-                "label": request.api_endpoint,
-            })
+                all_endpoints_str.append(f"{ap.source_id}{ap.endpoint}")
+        else:
+            # ── Mode 2: Live-fetch from endpoints ──
+            endpoints_to_fetch: list[dict] = []
+            if request.endpoints:
+                for ep in request.endpoints:
+                    endpoints_to_fetch.append({
+                        "source_id": ep.source_id,
+                        "endpoint": ep.endpoint,
+                        "method": ep.method,
+                        "label": ep.label or ep.endpoint,
+                    })
+            elif request.source_id and request.api_endpoint:
+                endpoints_to_fetch.append({
+                    "source_id": request.source_id,
+                    "endpoint": request.api_endpoint,
+                    "method": request.method,
+                    "label": request.api_endpoint,
+                })
 
-        if not endpoints_to_fetch:
-            raise HTTPException(400, "No endpoints specified")
+            if not endpoints_to_fetch:
+                raise HTTPException(400, "No endpoints or approved_payloads specified")
 
-        # Fetch all payloads
-        payload_results = []
-        payload_analyses = []
-        all_endpoints_str = []
-        for ep in endpoints_to_fetch:
-            payload_result = await api_explorer.fetch_payload(
-                source_id=ep["source_id"],
-                endpoint=ep["endpoint"],
-                method=ep.get("method", "GET"),
-            )
-            payload_analysis = api_explorer.analyze_payload(payload_result["payload"])
+            for ep in endpoints_to_fetch:
+                payload_result = await api_explorer.fetch_payload(
+                    source_id=ep["source_id"],
+                    endpoint=ep["endpoint"],
+                    method=ep.get("method", "GET"),
+                )
+                payload_analysis = api_explorer.analyze_payload(payload_result["payload"])
+                payload_analyses.append({
+                    "endpoint": ep["endpoint"],
+                    "source_label": ep.get("label", ep["endpoint"]),
+                    "analysis": payload_analysis,
+                    "raw_payload": payload_result["payload"],
+                })
+                all_endpoints_str.append(ep["endpoint"])
 
-            payload_results.append({
-                "endpoint": ep["endpoint"],
-                "source_id": ep["source_id"],
-                "label": ep.get("label", ep["endpoint"]),
-                "url": payload_result["url"],
-                "status_code": payload_result["status_code"],
-                "size_bytes": payload_result["payload_size_bytes"],
-                "raw_payload": _truncate_payload(payload_result["payload"], max_size=5000),
-                "structure": payload_analysis,
-            })
-            payload_analyses.append({
-                "endpoint": ep["endpoint"],
-                "source_label": ep.get("label", ep["endpoint"]),
-                "analysis": payload_analysis,
-                "raw_payload": payload_result["payload"],
-            })
-            all_endpoints_str.append(ep["endpoint"])
+        if not payload_analyses:
+            raise HTTPException(400, "No valid payloads to analyze")
 
         # Get RAG context
         rag_context = await mapping_engine.analyze_rag(
@@ -361,18 +375,21 @@ async def analyze_mapping(request: MappingAnalyzeRequest):
                 rag_context=rag_context,
             )
         else:
+            endpoint_labels = [pa["source_label"] for pa in payload_analyses]
             mapping = await mapping_engine.propose_mapping_multi(
                 data_point_name=request.data_point_name,
                 cmsd_entity=request.cmsd_entity,
+                endpoint_labels=endpoint_labels,
                 payload_analyses=payload_analyses,
                 rag_context=rag_context,
             )
 
         return {
             "success": True,
-            "payloads": payload_results,
+            "cmsd_entity": request.cmsd_entity,
+            "mapping": mapping,
+            "proposed_mapping": mapping,  # backward compat for GuidedMapping
             "rag_context": rag_context,
-            "proposed_mapping": mapping,
         }
     except Exception as e:
         logger.error(f"Mapping analysis failed: {e}")
@@ -476,7 +493,7 @@ async def fetch_endpoints(request: FetchEndpointsRequest):
                 "status": "success",
                 "status_code": result["status_code"],
                 "size_bytes": result["payload_size_bytes"],
-                "raw_payload": _truncate_payload(result["payload"], max_size=5000),
+                "raw_payload": result["payload"],
             }
         except asyncio.TimeoutError:
             logger.warning(f"Fetch timed out for {ep.source_id}{ep.endpoint}")
