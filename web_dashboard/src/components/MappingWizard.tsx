@@ -183,19 +183,14 @@ export default function MappingWizard({ onNavigateToQueue, preloadedMapping, onC
   const [inferredDeps, setInferredDeps] = useState<string[]>([]);
   const [indepEntities, setIndepEntities] = useState<Set<string>>(new Set(CMSD_ENTITIES));
 
-  const [existingMappings, setExistingMappings] = useState<Array<{ cmsd_entity: string; relation_targets?: string[] }>>([]);
-
-  // Fetch existing confirmed mapping entity types for tier computation
+  // Fetch existing confirmed mapping entity types for availability computation
   useEffect(() => {
     agentApi.listMappings().then(data => {
       const entSet = new Set<string>();
-      const mappingList: Array<{ cmsd_entity: string; relation_targets?: string[] }> = [];
       for (const m of data.mappings) {
         if (m.cmsd_entity) entSet.add(m.cmsd_entity);
-        mappingList.push({ cmsd_entity: m.cmsd_entity, relation_targets: m.relation_targets });
       }
       setExistingEntities(entSet);
-      setExistingMappings(mappingList);
     }).catch(() => {});
   }, [phase]);
 
@@ -992,56 +987,22 @@ export default function MappingWizard({ onNavigateToQueue, preloadedMapping, onC
                 </button>
               </div>
 
-              {/* ═══ Entity Selection Step (Phase 1) ═══ */}
-              <div style={{ marginTop: '20px', paddingTop: '18px', borderTop: '2px solid #475569' }}>
-                <RichEntityPicker
-                  selectedEntity={cmsdEntity}
-                  onSelect={setCmsdEntity}
-                  existingEntities={existingEntities}
-                  existingMappings={existingMappings}
-                  onContinue={approveAndMap}
-                  canContinue={canApprove}
-                />
+              {/* ═══ Entity selection (at top, before endpoints) ═══ */}
+              <RichEntityPicker
+                selectedEntity={cmsdEntity}
+                onSelect={setCmsdEntity}
+                existingEntities={existingEntities}
+              />
 
-                {/* Blocked entity warning */}
-                {(() => {
-                  const deps = existingMappings.reduce<string[]>((acc, m) => {
-                    if (m.cmsd_entity === cmsdEntity && m.relation_targets) {
-                      acc.push(...m.relation_targets);
-                    }
-                    return acc;
-                  }, []);
-                  const missing = deps.filter(d => !existingEntities.has(d));
-                  if (missing.length === 0 || !cmsdEntity) return null;
-                  return (
-                    <div style={{
-                      padding: '10px 14px', marginTop: '8px',
-                      background: '#422006', borderRadius: '6px',
-                      border: '1px solid #78350f',
-                    }}>
-                      <span style={{ color: '#fde68a', fontSize: '12px', fontWeight: 600 }}>
-                        {cmsdEntity} depends on {missing.join(', ')} — map {'them' in missing ? 'these' : 'it'} first.
-                      </span>
-                    </div>
-                  );
-                })()}
-
-                {/* Data point name + entity (shown below picker) */}
-                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap', marginTop: '8px' }}>
-                  <div style={{ minWidth: '180px' }}>
-                    <label style={labelStyle}>Data Point Name</label>
-                    <input value={dataPointName} onChange={e => setDataPointName(e.target.value)} placeholder="e.g. Factory Resources" style={inputStyle} />
-                  </div>
-                  <div style={{ minWidth: '160px' }}>
-                    <label style={labelStyle}>CMSD Entity</label>
-                    <select value={cmsdEntity} onChange={e => setCmsdEntity(e.target.value)} style={selectStyle}>
-                      {CMSD_ENTITIES.map(e => <option key={e} value={e}>{e}</option>)}
-                    </select>
-                  </div>
-                  <button onClick={approveAndMap} disabled={!canApprove} style={{ padding: '10px 28px', borderRadius: '6px', border: 'none', background: canApprove ? '#22c55e' : '#334155', color: canApprove ? '#fff' : '#64748b', cursor: canApprove ? 'pointer' : 'not-allowed', fontSize: '14px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px', whiteSpace: 'nowrap', height: '42px' }}>
-                    {approvedCount > 0 ? `Approve ${approvedCount} Selected & Map` : 'Approve Selected & Map'}
-                  </button>
+              {/* ═══ Data point name + approve ═══ */}
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap', marginTop: '14px' }}>
+                <div style={{ minWidth: '180px' }}>
+                  <label style={labelStyle}>Data Point Name</label>
+                  <input value={dataPointName} onChange={e => setDataPointName(e.target.value)} placeholder="e.g. Factory Resources" style={inputStyle} />
                 </div>
+                <button onClick={approveAndMap} disabled={!canApprove} style={{ padding: '10px 28px', borderRadius: '6px', border: 'none', background: canApprove ? '#22c55e' : '#334155', color: canApprove ? '#fff' : '#64748b', cursor: canApprove ? 'pointer' : 'not-allowed', fontSize: '14px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px', whiteSpace: 'nowrap', height: '42px' }}>
+                  {approvedCount > 0 ? `Approve ${approvedCount} Selected & Map` : 'Approve Selected & Map'}
+                </button>
               </div>
             </>
           )}
