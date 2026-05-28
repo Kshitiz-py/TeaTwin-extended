@@ -287,49 +287,22 @@ export default function RichEntityPicker({ selectedEntity, onSelect, existingEnt
             onToggle={() => toggleSection('required')}
           >
             {selectedInfo.fields.filter(f => f.required && !f.has_default).length === 0 ? (
-              <p style={{ color: '#64748b', fontSize: '11px', margin: 0 }}>
+              <p style={{ color: '#64748b', fontSize: '12px', margin: 0 }}>
                 No mandatory fields — all fields have defaults or are optional. The CMSD model will accept an empty entity.
               </p>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                {selectedInfo.fields.filter(f => f.required && !f.has_default).map(f => (
-                  <div key={f.name} style={{ display: 'flex', gap: '10px', fontSize: '11px' }}>
-                    <code style={{ color: '#fca5a5', minWidth: '100px', fontFamily: 'monospace' }}>{f.name}</code>
-                    <span style={{ color: '#64748b' }}>{f.type}</span>
-                    {f.description && <span style={{ color: '#475569' }}>— {f.description}</span>}
-                  </div>
-                ))}
-              </div>
+              <FieldTable fields={selectedInfo.fields.filter(f => f.required && !f.has_default)} />
             )}
           </Section>
 
           {/* Expandable: All CMSD fields */}
           <Section
-            label={`All CMSD fields (${selectedInfo.fields.length})`}
+            label="All CMSD fields"
             count={selectedInfo.fields.length}
             expanded={expandedSections.has('allFields')}
             onToggle={() => toggleSection('allFields')}
           >
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-              {selectedInfo.fields.map(f => (
-                <div key={f.name} style={{ display: 'flex', gap: '10px', fontSize: '11px', alignItems: 'baseline' }}>
-                  <code style={{
-                    color: f.required && !f.has_default ? '#fca5a5' : '#e2e8f0',
-                    minWidth: '130px', fontFamily: 'monospace',
-                  }}>
-                    {f.name}
-                  </code>
-                  <span style={{ color: '#64748b', minWidth: '100px', fontSize: '10px' }}>{f.type}</span>
-                  <span style={{ color: '#475569', fontSize: '10px' }}>
-                    {f.required && !f.has_default ? 'required' : f.has_default ? 'has default' : 'optional'}
-                    {f.is_reference ? ' · reference' : ''}
-                  </span>
-                  {f.description && (
-                    <span style={{ color: '#64748b', flex: 1, fontSize: '10px' }}>{f.description}</span>
-                  )}
-                </div>
-              ))}
-            </div>
+            <FieldTable fields={selectedInfo.fields} />
           </Section>
 
           {/* Expandable: Example payload */}
@@ -351,6 +324,84 @@ export default function RichEntityPicker({ selectedEntity, onSelect, existingEnt
           </Section>
         </div>
       )}
+    </div>
+  );
+}
+
+const STATUS_STYLE: Record<string, React.CSSProperties> = {
+  required: {
+    padding: '2px 8px', borderRadius: '6px', fontSize: '10px', fontWeight: 600,
+    background: '#7f1d1d', color: '#fca5a5', border: '1px solid #991b1b',
+    whiteSpace: 'nowrap' as const,
+  },
+  optional: {
+    padding: '2px 8px', borderRadius: '6px', fontSize: '10px', fontWeight: 500,
+    background: '#1e293b', color: '#94a3b8', border: '1px solid #334155',
+    whiteSpace: 'nowrap' as const,
+  },
+  defaulted: {
+    padding: '2px 8px', borderRadius: '6px', fontSize: '10px', fontWeight: 500,
+    background: '#0f1a2e', color: '#64748b', border: '1px solid #1e293b',
+    whiteSpace: 'nowrap' as const,
+  },
+  reference: {
+    padding: '2px 8px', borderRadius: '6px', fontSize: '10px', fontWeight: 600,
+    background: '#1e1b4b', color: '#a5b4fc', border: '1px solid #3730a3',
+    whiteSpace: 'nowrap' as const,
+  },
+};
+
+function FieldTable({ fields }: { fields: CatalogField[] }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
+      {fields.map((f, i) => {
+        let statusKey: string;
+        let statusLabel: string;
+        if (f.is_reference) {
+          statusKey = 'reference';
+          statusLabel = 'reference';
+        } else if (f.required && !f.has_default) {
+          statusKey = 'required';
+          statusLabel = 'required';
+        } else if (f.has_default) {
+          statusKey = 'defaulted';
+          statusLabel = 'has default';
+        } else {
+          statusKey = 'optional';
+          statusLabel = 'optional';
+        }
+        return (
+          <div key={f.name} style={{
+            display: 'flex', alignItems: 'center', gap: '12px',
+            padding: '6px 10px',
+            background: i % 2 === 0 ? 'transparent' : 'rgba(15,23,42,0.5)',
+            borderRadius: '6px',
+          }}>
+            <code style={{
+              color: f.required && !f.has_default ? '#fca5a5' : '#e2e8f0',
+              fontFamily: 'monospace', fontSize: '12px', fontWeight: 500,
+              minWidth: '150px', flexShrink: 0,
+            }}>
+              {f.name}
+            </code>
+            <code style={{
+              color: '#64748b', fontFamily: 'monospace', fontSize: '11px',
+              minWidth: '110px', flexShrink: 0,
+            }}>
+              {f.type}
+            </code>
+            <span style={STATUS_STYLE[statusKey]}>{statusLabel}</span>
+            {f.description && (
+              <span style={{
+                color: '#64748b', fontSize: '11px', flex: 1,
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const,
+              }}>
+                {f.description}
+              </span>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
