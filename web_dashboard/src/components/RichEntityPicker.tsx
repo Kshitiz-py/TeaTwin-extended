@@ -85,44 +85,67 @@ export default function RichEntityPicker({ selectedEntity, onSelect, existingEnt
         @keyframes rp-fadein { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
       `}</style>
 
+      {/* ── Section heading ── */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px',
+      }}>
+        <span style={{
+          width: '28px', height: '28px', borderRadius: '8px',
+          background: '#312e81', color: '#a5b4fc',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: '14px', fontWeight: 700, flexShrink: 0,
+        }}>1</span>
+        <div>
+          <h3 style={{ color: '#f1f5f9', margin: 0, fontSize: '14px', fontWeight: 600 }}>
+            What do you want to map?
+          </h3>
+          <p style={{ color: '#64748b', margin: '1px 0 0', fontSize: '11px' }}>
+            Select a CMSD entity. Independent entities are available immediately; dependent ones unlock as their references are mapped.
+          </p>
+        </div>
+      </div>
+
       {/* ── Dropdown ── */}
       <div style={{ position: 'relative' }}>
-        <label style={{
-          fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px',
-          fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.5px',
-        }}>
-          What do you want to map?
-        </label>
-
         <button
           onClick={() => setOpen(!open)}
           onBlur={() => setTimeout(() => setOpen(false), 150)}
           style={{
             width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: '8px 12px', background: '#0f172a', border: '1px solid #334155',
-            borderRadius: '6px', color: '#f1f5f9', fontSize: '13px', cursor: 'pointer',
+            padding: '10px 14px', background: '#0f172a', border: '1px solid #334155',
+            borderRadius: '8px', color: '#f1f5f9', fontSize: '13px', cursor: 'pointer',
             fontFamily: 'monospace', textAlign: 'left',
+            transition: 'border-color 0.15s',
           }}>
-          <span style={{ color: selectedEntity ? '#f1f5f9' : '#64748b' }}>
-            {selectedEntity || 'Select a CMSD entity...'}
-          </span>
-          <span style={{ color: '#475569', fontSize: '11px' }}>{open ? '▴' : '▾'}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {selectedEntity && (
+              <span style={{
+                width: '8px', height: '8px', borderRadius: '50%',
+                background: getMissingDeps(selectedInfo || { name: '', description: '', fields: [], references: [], hierarchy: '', example: {} }).length === 0 ? '#22c55e' : '#f59e0b',
+                flexShrink: 0,
+              }} />
+            )}
+            <span style={{ color: selectedEntity ? '#f1f5f9' : '#64748b' }}>
+              {selectedEntity || 'Select a CMSD entity…'}
+            </span>
+          </div>
+          <span style={{ color: '#475569', fontSize: '12px' }}>{open ? '▲' : '▼'}</span>
         </button>
 
         {open && (
           <div style={{
             position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100,
             background: '#1e293b', border: '1px solid #334155', borderRadius: '8px',
-            marginTop: '4px', boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+            marginTop: '4px', boxShadow: '0 12px 32px rgba(0,0,0,0.6)',
             maxHeight: '320px', overflowY: 'auto',
           }}>
-            {/* Available section */}
             {available.length > 0 && (
               <div>
                 <div style={{
-                  padding: '6px 12px', fontSize: '10px', color: '#22c55e',
-                  fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px',
+                  padding: '8px 14px', fontSize: '10px', color: '#86efac',
+                  fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.6px',
                   background: '#0f172a', position: 'sticky', top: 0,
+                  borderBottom: '1px solid #1e293b',
                 }}>
                   Available to map ({available.length})
                 </div>
@@ -131,26 +154,26 @@ export default function RichEntityPicker({ selectedEntity, onSelect, existingEnt
                     key={e.name}
                     onClick={() => { onSelect(e.name); setOpen(false); }}
                     style={{
-                      width: '100%', display: 'flex', alignItems: 'center', gap: '8px',
-                      padding: '6px 12px', border: 'none', background: selectedEntity === e.name ? '#1e3a5f' : 'transparent',
-                      color: '#e2e8f0', fontSize: '12px', cursor: 'pointer',
+                      width: '100%', display: 'flex', alignItems: 'center', gap: '10px',
+                      padding: '8px 14px', border: 'none',
+                      background: selectedEntity === e.name ? '#1e3a5f' : 'transparent',
+                      color: '#e2e8f0', fontSize: '13px', cursor: 'pointer',
                       fontFamily: 'monospace', textAlign: 'left',
                     }}>
-                    <span style={{ color: '#22c55e', fontSize: '8px' }}>●</span>
+                    <span style={{ color: '#22c55e', fontSize: '8px', flexShrink: 0 }}>●</span>
                     {e.name}
                   </button>
                 ))}
               </div>
             )}
 
-            {/* Blocked section */}
             {blocked.length > 0 && (
               <div>
                 <div style={{
-                  padding: '6px 12px', fontSize: '10px', color: '#f59e0b',
-                  fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px',
+                  padding: '8px 14px', fontSize: '10px', color: '#fde68a',
+                  fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.6px',
                   background: '#0f172a', position: 'sticky', top: 0,
-                  borderTop: '1px solid #334155',
+                  borderTop: '1px solid #334155', borderBottom: '1px solid #1e293b',
                 }}>
                   Blocked by dependencies ({blocked.length})
                 </div>
@@ -159,14 +182,18 @@ export default function RichEntityPicker({ selectedEntity, onSelect, existingEnt
                     key={e.name}
                     onClick={() => { onSelect(e.name); setOpen(false); }}
                     style={{
-                      width: '100%', display: 'flex', alignItems: 'center', gap: '8px',
-                      padding: '6px 12px', border: 'none', background: selectedEntity === e.name ? '#422006' : 'transparent',
-                      color: '#94a3b8', fontSize: '12px', cursor: 'pointer',
+                      width: '100%', display: 'flex', alignItems: 'center', gap: '10px',
+                      padding: '8px 14px', border: 'none',
+                      background: selectedEntity === e.name ? '#422006' : 'transparent',
+                      color: '#94a3b8', fontSize: '13px', cursor: 'pointer',
                       fontFamily: 'monospace', textAlign: 'left',
                     }}>
-                    <span style={{ color: '#f59e0b', fontSize: '8px' }}>●</span>
+                    <span style={{ color: '#f59e0b', fontSize: '8px', flexShrink: 0 }}>●</span>
                     {e.name}
-                    <span style={{ color: '#f59e0b', fontSize: '10px', marginLeft: 'auto' }}>
+                    <span style={{
+                      color: '#f59e0b', fontSize: '10px', marginLeft: 'auto',
+                      background: '#422006', padding: '1px 6px', borderRadius: '8px',
+                    }}>
                       needs {getMissingDeps(e).join(', ')}
                     </span>
                   </button>
@@ -177,15 +204,15 @@ export default function RichEntityPicker({ selectedEntity, onSelect, existingEnt
         )}
       </div>
 
-      {/* ── Entity detail panel (progressive disclosure) ── */}
+      {/* ── Entity detail panel ── */}
       {selectedInfo && (
         <div style={{
-          marginTop: '10px', padding: '14px 16px',
-          background: '#0f172a', borderRadius: '8px', border: '1px solid #334155',
+          marginTop: '10px', padding: '16px',
+          background: '#0f172a', borderRadius: '10px', border: '1px solid #1e293b',
           animation: 'rp-fadein 0.15s ease',
         }}>
           {/* Always visible: description + availability */}
-          <p style={{ margin: '0 0 8px', color: '#94a3b8', fontSize: '12px', lineHeight: 1.5 }}>
+          <p style={{ margin: '0 0 10px', color: '#94a3b8', fontSize: '13px', lineHeight: 1.6 }}>
             {selectedInfo.description}
           </p>
 
@@ -194,25 +221,29 @@ export default function RichEntityPicker({ selectedEntity, onSelect, existingEnt
             if (missing.length === 0) {
               return (
                 <div style={{
-                  padding: '6px 10px', borderRadius: '4px',
+                  display: 'flex', alignItems: 'center', gap: '8px',
+                  padding: '8px 12px', borderRadius: '6px', marginBottom: '8px',
                   background: '#14532d', border: '1px solid #166534',
-                  color: '#86efac', fontSize: '11px', fontWeight: 500,
-                  marginBottom: '8px',
+                  color: '#86efac', fontSize: '12px',
                 }}>
-                  ✓ Available to map — all dependencies satisfied
+                  <span style={{ fontSize: '14px' }}>✓</span>
+                  <span>Ready to map — all dependencies satisfied</span>
                 </div>
               );
             }
             return (
               <div style={{
-                padding: '6px 10px', borderRadius: '4px',
+                display: 'flex', alignItems: 'center', gap: '8px',
+                padding: '8px 12px', borderRadius: '6px', marginBottom: '8px',
                 background: '#422006', border: '1px solid #78350f',
-                color: '#fde68a', fontSize: '11px', fontWeight: 500,
-                marginBottom: '8px',
+                color: '#fde68a', fontSize: '12px',
               }}>
-                🔒 Cannot map yet — {selectedInfo.name} references{' '}
-                <strong style={{ color: '#fbbf24' }}>{missing.join(', ')}</strong>
-                {missing.length === 1 ? ', which has' : ', which have'} not been mapped.
+                <span style={{ fontSize: '14px' }}>🔒</span>
+                <span>
+                  Cannot map yet — needs{' '}
+                  <strong style={{ color: '#fbbf24' }}>{missing.join(', ')}</strong>
+                  {' '}to be mapped first
+                </span>
               </div>
             );
           })()}
@@ -335,28 +366,34 @@ function Section({ label, count, expanded, onToggle, children }: {
   children: React.ReactNode;
 }) {
   return (
-    <div style={{ marginTop: '4px' }}>
+    <div style={{
+      borderTop: '1px solid #1e293b',
+      marginTop: '2px',
+    }}>
       <button
         onClick={onToggle}
         style={{
-          width: '100%', display: 'flex', alignItems: 'center', gap: '6px',
-          padding: '4px 0', border: 'none', background: 'transparent',
-          color: '#64748b', fontSize: '11px', cursor: 'pointer',
+          width: '100%', display: 'flex', alignItems: 'center', gap: '8px',
+          padding: '8px 0', border: 'none', background: 'transparent',
+          color: '#94a3b8', fontSize: '12px', cursor: 'pointer',
           fontWeight: 500, textAlign: 'left',
         }}>
-        <span style={{ fontSize: '10px', color: '#475569' }}>{expanded ? '▾' : '▸'}</span>
+        <span style={{
+          color: expanded ? '#818cf8' : '#475569',
+          fontSize: '10px', transition: 'transform 0.15s',
+        }}>{expanded ? '▾' : '▸'}</span>
         {label}
         {count > 0 && (
           <span style={{
-            padding: '0 6px', borderRadius: '8px', background: '#1e293b',
-            color: '#64748b', fontSize: '10px',
+            padding: '0 7px', borderRadius: '10px', background: '#1e293b',
+            color: '#64748b', fontSize: '10px', fontWeight: 600,
           }}>
             {count}
           </span>
         )}
       </button>
       {expanded && (
-        <div style={{ paddingLeft: '16px', paddingTop: '4px', paddingBottom: '4px' }}>
+        <div style={{ padding: '0 0 10px 22px' }}>
           {children}
         </div>
       )}

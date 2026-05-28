@@ -929,10 +929,12 @@ export default function MappingWizard({ onNavigateToQueue, preloadedMapping, onC
     <div style={{ maxWidth: '960px', margin: '0 auto' }}>
       <style>{'@keyframes spin { to { transform: rotate(360deg); } }'}</style>
 
-      <div style={{ marginBottom: '20px' }}>
-        <h2 style={{ color: '#f1f5f9', margin: '0 0 4px', fontSize: '20px' }}>API Explorer</h2>
-        <p style={{ color: '#94a3b8', margin: 0, fontSize: '13px' }}>
-          Add endpoints, fire individually or all at once. Approve payloads to map them to CMSD entities.
+      <div style={{ marginBottom: '24px' }}>
+        <h2 style={{ color: '#f1f5f9', margin: '0 0 6px', fontSize: '22px', fontWeight: 700, letterSpacing: '-0.3px' }}>
+          Guided Mapping
+        </h2>
+        <p style={{ color: '#64748b', margin: 0, fontSize: '13px', lineHeight: 1.5 }}>
+          Map your API data to CMSD entities step by step. Select what to map, provide endpoints, and let the AI propose the field mapping.
         </p>
       </div>
 
@@ -961,13 +963,25 @@ export default function MappingWizard({ onNavigateToQueue, preloadedMapping, onC
               />
 
               {/* ── Section 2: API Endpoints ── */}
-              <div style={{
-                marginTop: '16px', paddingTop: '14px', borderTop: '1px solid #334155',
-              }}>
-                <label style={labelStyle}>API Endpoints</label>
-                <p style={{ color: '#64748b', margin: '0 0 10px', fontSize: '11px' }}>
-                  Add the API endpoints that contain data for {cmsdEntity || 'this entity'}.
-                </p>
+              <div style={{ marginTop: '20px', paddingTop: '18px', borderTop: '1px solid #1e293b' }}>
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px',
+                }}>
+                  <span style={{
+                    width: '28px', height: '28px', borderRadius: '8px',
+                    background: '#1e3a5f', color: '#93c5fd',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: '14px', fontWeight: 700, flexShrink: 0,
+                  }}>2</span>
+                  <div>
+                    <h3 style={{ color: '#f1f5f9', margin: 0, fontSize: '14px', fontWeight: 600 }}>
+                      API Endpoints
+                    </h3>
+                    <p style={{ color: '#64748b', margin: '1px 0 0', fontSize: '11px' }}>
+                      Provide the APIs that contain data for <strong style={{ color: '#a78bfa' }}>{cmsdEntity || 'this entity'}</strong>.
+                    </p>
+                  </div>
+                </div>
 
                 {endpoints.length === 0 && (
                   <div style={{ padding: '24px', textAlign: 'center', background: '#1e293b', borderRadius: '8px', border: '1px dashed #475569', color: '#94a3b8', fontSize: '13px', marginBottom: '10px' }}>
@@ -1004,15 +1018,35 @@ export default function MappingWizard({ onNavigateToQueue, preloadedMapping, onC
                 </div>
               </div>
 
-              {/* ── Section 3: Name & Approve ── */}
-              <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap', marginTop: '14px', paddingTop: '14px', borderTop: '1px solid #334155' }}>
-                <div style={{ minWidth: '180px' }}>
-                  <label style={labelStyle}>Data Point Name</label>
-                  <input value={dataPointName} onChange={e => setDataPointName(e.target.value)} placeholder="e.g. Factory Resources" style={inputStyle} />
+              {/* ── Section 3: Name & Go ── */}
+              <div style={{ marginTop: '20px', paddingTop: '18px', borderTop: '1px solid #1e293b' }}>
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px',
+                }}>
+                  <span style={{
+                    width: '28px', height: '28px', borderRadius: '8px',
+                    background: '#14532d', color: '#86efac',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: '14px', fontWeight: 700, flexShrink: 0,
+                  }}>3</span>
+                  <div>
+                    <h3 style={{ color: '#f1f5f9', margin: 0, fontSize: '14px', fontWeight: 600 }}>
+                      Name & Generate
+                    </h3>
+                    <p style={{ color: '#64748b', margin: '1px 0 0', fontSize: '11px' }}>
+                      Give your mapping a name and send it to the AI for field proposal.
+                    </p>
+                  </div>
                 </div>
-                <button onClick={approveAndMap} disabled={!canApprove} style={{ padding: '10px 28px', borderRadius: '6px', border: 'none', background: canApprove ? '#22c55e' : '#334155', color: canApprove ? '#fff' : '#64748b', cursor: canApprove ? 'pointer' : 'not-allowed', fontSize: '14px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px', whiteSpace: 'nowrap', height: '42px' }}>
-                  {approvedCount > 0 ? `Approve ${approvedCount} Selected & Map` : 'Approve Selected & Map'}
-                </button>
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                  <div style={{ minWidth: '220px' }}>
+                    <label style={labelStyle}>Data Point Name</label>
+                    <input value={dataPointName} onChange={e => setDataPointName(e.target.value)} placeholder="e.g. Factory Resources" style={inputStyle} />
+                  </div>
+                  <button onClick={approveAndMap} disabled={!canApprove} style={{ padding: '12px 32px', borderRadius: '8px', border: 'none', background: canApprove ? '#22c55e' : '#1e293b', color: canApprove ? '#fff' : '#475569', cursor: canApprove ? 'pointer' : 'not-allowed', fontSize: '14px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px', whiteSpace: 'nowrap', height: '42px' }}>
+                    {approvedCount > 0 ? `Approve ${approvedCount} Selected & Map` : 'Approve Selected & Map'}
+                  </button>
+                </div>
               </div>
             </>
           )}
