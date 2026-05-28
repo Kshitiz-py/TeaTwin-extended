@@ -39,9 +39,9 @@ class CMSDOrchestrator:
         self.factory = CMSDFactory()
         self.detector = ChangeDetector()
 
-        # Mapping-driven generation (Slice 5.2+)
+        # Mapping-driven generation
         self._mapping_factory = MappingDrivenFactory()
-        self._registry = None  # MappingRegistry — set in Slice 5.3
+        self._registry = MappingRegistry()
 
         # Polling
         self._poll_interval = poll_interval if poll_interval is not None else POLL_INTERVAL
@@ -100,10 +100,13 @@ class CMSDOrchestrator:
         if self._running:
             return
 
-        # Load mapping files
+        # Load mapping files and register in dependency DAG
         mappings_dir = os.path.join(os.path.dirname(__file__), "..", ".agent-mappings")
         self._mapping_factory.load_mappings(mappings_dir)
-        logger.info(f"Loaded {len(self._mapping_factory._mappings)} mapping(s)")
+        self._registry = MappingRegistry()
+        for mapping in self._mapping_factory._mappings:
+            self._registry.register(mapping)
+        logger.info(f"Loaded {len(self._mapping_factory._mappings)} mapping(s) into registry")
 
         self._running = True
         if self._poll_interval > 0:

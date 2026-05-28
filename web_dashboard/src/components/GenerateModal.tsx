@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { api, RefreshReport } from '../services/api';
+import { api, RefreshReport, PreflightResult } from '../services/api';
 
 interface GenerateModalProps {
   open: boolean;
@@ -7,6 +7,7 @@ interface GenerateModalProps {
   onClose: () => void;
   onComplete: (report: RefreshReport) => void;
   onViewDashboard?: () => void;
+  preflightResult?: PreflightResult | null;
 }
 
 type PhaseStatus = 'pending' | 'running' | 'done' | 'error';
@@ -18,7 +19,7 @@ interface Phase {
   detail?: string;
 }
 
-export default function GenerateModal({ open, mappingIds, onClose, onComplete, onViewDashboard }: GenerateModalProps) {
+export default function GenerateModal({ open, mappingIds, onClose, onComplete, onViewDashboard, preflightResult }: GenerateModalProps) {
   const [phases, setPhases] = useState<Phase[]>([
     { key: 'preflight', label: 'Pre-flight check', status: 'pending' },
     { key: 'fetch', label: 'Fetching APIs', status: 'pending' },
@@ -49,7 +50,7 @@ export default function GenerateModal({ open, mappingIds, onClose, onComplete, o
     try {
       updatePhase('preflight', 'running');
       await new Promise(r => setTimeout(r, 300));
-      updatePhase('preflight', 'done', 'Passed');
+      updatePhase('preflight', 'done', mappingIds.length > 1 ? `${mappingIds.length} mappings queued` : 'Passed');
 
       updatePhase('fetch', 'running');
       const result = await api.refreshInstances(mappingIds, false);
@@ -93,7 +94,7 @@ export default function GenerateModal({ open, mappingIds, onClose, onComplete, o
   const handleRetryFailed = async () => {
     if (!report) return;
     const failedIds = report.fetch_errors
-      .map(e => mappingIds.find(id => id.includes(e.entity_type.toLowerCase())))
+      .map(e => (e as any).mapping_id)
       .filter(Boolean) as string[];
     if (failedIds.length === 0) return;
     setError(null);
@@ -169,6 +170,56 @@ export default function GenerateModal({ open, mappingIds, onClose, onComplete, o
 
         <style>{'@keyframes spin { to { transform: rotate(360deg); } }'}</style>
 
+        {/* Pre-flight checks — transparent validation results */}
+        {preflightResult && (
+          <div style={{
+            padding: '10px 12px', borderRadius: '6px', marginBottom: '14px',
+            background: '#0f172a', border: '1px solid #334155',
+          }}>
+            <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              Pre-flight Checks
+            </div>
+            {[
+              {
+                label: 'Dependencies',
+                passed: preflightResult.checks.dependencies.passed,
+                detail: preflightResult.checks.dependencies.auto_selected?.length > 0
+                  ? `Auto-selected: ${preflightResult.checks.dependencies.auto_selected.join(', ')}`
+                  : preflightResult.checks.dependencies.missing?.length > 0
+                    ? `Missing: ${preflightResult.checks.dependencies.missing.map((m: any) => m.for_entity).join(', ')}`
+                    : 'All satisfied',
+              },
+              {
+                label: 'Field Coverage',
+                passed: preflightResult.checks.field_coverage.passed,
+                detail: preflightResult.checks.field_coverage.unapproved?.length > 0
+                  ? `${preflightResult.checks.field_coverage.unapproved.length} field(s) not approved`
+                  : 'All fields approved',
+              },
+              {
+                label: 'API Reachability',
+                passed: preflightResult.checks.api_reachability.passed,
+                detail: preflightResult.checks.api_reachability.unreachable?.length > 0
+                  ? `${preflightResult.checks.api_reachability.unreachable.length} unreachable`
+                  : 'All reachable',
+              },
+            ].map(check => (
+              <div key={check.label} style={{
+                display: 'flex', alignItems: 'center', gap: '8px',
+                fontSize: '12px', padding: '3px 0',
+              }}>
+                <span style={{ color: check.passed ? '#22c55e' : '#ef4444', width: '14px' }}>
+                  {check.passed ? '✓' : '✕'}
+                </span>
+                <span style={{ color: '#e2e8f0', minWidth: '110px' }}>{check.label}</span>
+                <span style={{ color: check.passed ? '#64748b' : '#fca5a5', fontSize: '11px' }}>
+                  {check.detail}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Error */}
         {error && (
           <div style={{
@@ -189,6 +240,14 @@ export default function GenerateModal({ open, mappingIds, onClose, onComplete, o
             <div style={{ color: '#f1f5f9', fontSize: '14px', fontWeight: 600, marginBottom: '8px' }}>
               {allFailed ? 'Generation Failed' : hasErrors ? 'Partial Success' : 'Generation Complete'}
             </div>
+            {/* Topological order */}
+            {report.phases.topological_order && report.phases.topological_order.length > 1 && (
+              <div style={{ color: '#94a3b8', fontSize: '11px', marginBottom: '6px' }}>
+                Build order: {report.phases.topological_order.map((id, i) =>
+                  `${i + 1}. ${id.slice(0, 8)}`
+                ).join(' → ')}
+              </div>
+            )}
             {Object.entries(report.phases.generation).map(([entity, info]) => (
               <div key={entity} style={{ color: '#e2e8f0', fontSize: '12px', marginBottom: '4px' }}>
                 {entity}: {info.count} instance(s) from {info.source}
@@ -201,11 +260,31 @@ export default function GenerateModal({ open, mappingIds, onClose, onComplete, o
             )}
             {report.fetch_errors.length > 0 && (
               <div style={{ marginTop: '8px' }}>
+                <div style={{ color: '#fca5a5', fontSize: '11px', fontWeight: 600, marginBottom: '4px' }}>
+                  Fetch Errors:
+                </div>
                 {report.fetch_errors.map((err, i) => (
-                  <div key={i} style={{ color: '#fca5a5', fontSize: '11px' }}>
-                    Failed: {err.entity_type} — {err.error}
+                  <div key={i} style={{ color: '#fca5a5', fontSize: '11px', marginLeft: '8px' }}>
+                    {err.entity_type} — {err.error}
                   </div>
                 ))}
+              </div>
+            )}
+            {report.field_warnings && report.field_warnings.length > 0 && (
+              <div style={{ marginTop: '8px' }}>
+                <div style={{ color: '#fbbf24', fontSize: '11px', fontWeight: 600, marginBottom: '4px' }}>
+                  Field Warnings ({report.field_warnings.length}):
+                </div>
+                {report.field_warnings.slice(0, 10).map((w: any, i: number) => (
+                  <div key={i} style={{ color: '#fbbf24', fontSize: '11px', marginLeft: '8px' }}>
+                    {w.entity_type}/{w.instance_key}: <strong>{w.field}</strong> — {w.api_path?.slice?.(0, 80) || w.api_path}
+                  </div>
+                ))}
+                {report.field_warnings.length > 10 && (
+                  <div style={{ color: '#64748b', fontSize: '11px', marginLeft: '8px' }}>
+                    ...and {report.field_warnings.length - 10} more
+                  </div>
+                )}
               </div>
             )}
             <div style={{ color: '#94a3b8', fontSize: '11px', marginTop: '6px' }}>

@@ -786,26 +786,37 @@ def _normalize_api_paths(mapping: dict) -> dict:
     """
     Strip the count_path array prefix from every api_path so all paths
     are instance-relative. Called before saving a confirmed mapping.
-    Handles patterns like:
-      resources.identifier   → identifier
-      resources[*].identifier → identifier
-      resources.0.identifier  → identifier
+
+    Handles any nesting depth — generic across all API response structures:
+      $.resources[*].identifier        → identifier
+      $.d.results[*].ObjectID          → ObjectID
+      $.data.orders[*].status          → status
+      resources[*].name                 → name
+      resources.0.name                  → name
+      name                              → name (already relative)
     """
     import re
     count_path = mapping.get("instances", {}).get("count_path", "")
     if not count_path:
         return mapping
 
-    cleaned = count_path.replace("$.", "").replace("[*]", "")
-    prefix_parts = [p for p in cleaned.split(".") if p]
-    if not prefix_parts:
+    # Extract all path segments before the [*] array indicator.
+    # $.d.results[*] → ["d", "results"]; $.resources[*] → ["resources"]
+    cleaned = count_path.replace("$.", "", 1) if count_path.startswith("$.") else count_path
+    cleaned = cleaned.replace("[*]", "")
+    prefix_segments = [p for p in cleaned.split(".") if p]
+    if not prefix_segments:
         return mapping
 
-    prefix = prefix_parts[0]  # e.g. "resources"
-    # Build patterns to strip: "resources.", "resources[*].", "resources.0."
-    strip_pattern = re.compile(
-        r'^' + re.escape(prefix) + r'(?:\[[*]\]|\d+)?\.'
-    )
+    # Build regex to strip the full array prefix, with optional [*] or digit
+    # index between each segment. e.g. for ["d", "results"]:
+    #   ^d\.(?:\[[*]\]|\d+)?\.results\.(?:\[[*]\]|\d+)?\.
+    prefix_pattern = ""
+    for seg in prefix_segments:
+        prefix_pattern += re.escape(seg) + r'\.(?:\[[*]\]|\d+)?\.'
+    # Make the final dot optional (path may not have trailing dot)
+    prefix_pattern += "?"
+    strip_re = re.compile('^' + prefix_pattern)
 
     field_mappings = mapping.get("mapping", {})
     for cmsd_field, field_info in field_mappings.items():
@@ -815,8 +826,11 @@ def _normalize_api_paths(mapping: dict) -> dict:
         if not api_path:
             continue
 
-        # Strip the array prefix
-        normalized = strip_pattern.sub('', api_path, count=1)
+        # Strip leading "$." if present
+        normalized = api_path.replace("$.", "", 1) if api_path.startswith("$.") else api_path
+
+        # Strip the full array prefix (all nesting levels)
+        normalized = strip_re.sub('', normalized, count=1)
         if normalized and normalized != api_path:
             field_info["api_path"] = normalized
 
@@ -1009,6 +1023,57 @@ async def delete_mapping(mapping_id: str):
     # Also remove from in-memory queue if present
     _mapping_queue.pop(mapping_id, None)
     return {"success": True, "message": f"Mapping {mapping_id} deleted"}
+
+
+CMSD_ENTITIES = [
+    "Resource", "ResourceClass", "PartType", "Part", "BillOfMaterials",
+    "BillOfMaterialsComponent", "ProcessPlan", "Process", "Order", "OrderLine",
+    "Calendar", "Shift", "Break", "Holiday", "Connection",
+    "Job", "InventoryItem", "MaintenancePlan",
+]
+
+# In V1, all CMSD entities are independent at the top level because
+# cross-entity references live in nested objects (out of scope for V1).
+# Dependencies come from API field naming conventions at mapping time.
+INDEPENDENT_ENTITIES = set(CMSD_ENTITIES)
+
+
+def _infer_deps_from_fields(cmsd_entity: str, field_map: dict) -> list[str]:
+    """Infer cross-entity dependencies from field naming conventions."""
+    deps = set()
+    for field_name in field_map:
+        if field_name.endswith("_id"):
+            entity_hint = (
+                field_name.replace("_id", "")
+                .replace("_", " ")
+                .title()
+                .replace(" ", "")
+            )
+            if entity_hint in CMSD_ENTITIES and entity_hint != cmsd_entity:
+                deps.add(entity_hint)
+    return sorted(deps)
+
+
+@router.post("/mapping/infer-dependencies")
+async def infer_dependencies(body: dict):
+    """Infer cross-entity dependencies for an in-progress mapping.
+    Uses naming conventions ({entity}_id -> {Entity}) and the list of
+    known independent entities. Returns both inferred dependencies and
+    whether this entity is ready to map (all deps are independent or
+    already have confirmed mappings)."""
+    cmsd_entity = body.get("cmsd_entity", "")
+    field_map = body.get("mapping", {})
+
+    inferred = _infer_deps_from_fields(cmsd_entity, field_map)
+    is_independent = cmsd_entity in INDEPENDENT_ENTITIES and len(inferred) == 0
+
+    return {
+        "entity": cmsd_entity,
+        "dependencies": inferred,
+        "is_independent": is_independent,
+        "independent_entities": sorted(INDEPENDENT_ENTITIES),
+        "all_entities": CMSD_ENTITIES,
+    }
 
 
 # ─── Code Generation Pipeline ───────────────────────────────

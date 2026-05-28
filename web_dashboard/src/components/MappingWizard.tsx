@@ -174,6 +174,22 @@ export default function MappingWizard({ onNavigateToQueue, preloadedMapping, onC
   const [analyzeSteps, setAnalyzeSteps] = useState<{ label: string; detail: string; status: 'pending' | 'running' | 'done' }[]>([]);
   const [analyzeProgress, setAnalyzeProgress] = useState(0);
 
+  // Entity recommendation tiers
+  const [existingEntities, setExistingEntities] = useState<Set<string>>(new Set());
+  const [inferredDeps, setInferredDeps] = useState<string[]>([]);
+  const [indepEntities, setIndepEntities] = useState<Set<string>>(new Set(CMSD_ENTITIES));
+
+  // Fetch existing confirmed mapping entity types for tier computation
+  useEffect(() => {
+    agentApi.listMappings().then(data => {
+      const entSet = new Set<string>();
+      for (const m of data.mappings) {
+        if (m.cmsd_entity) entSet.add(m.cmsd_entity);
+      }
+      setExistingEntities(entSet);
+    }).catch(() => {});
+  }, [phase]);
+
   // Type validation results
   const [typeValidation, setTypeValidation] = useState<any>(null);
   const runTypeValidation = useCallback(async (mapping: any, entity: string) => {
@@ -219,7 +235,12 @@ export default function MappingWizard({ onNavigateToQueue, preloadedMapping, onC
 
   // Preload a saved mapping for editing (skip to Phase 2)
   useEffect(() => {
-    if (!preloadedMapping) return;
+    if (!preloadedMapping) {
+      // Clear refs when not editing — prevents stale data from previous edit sessions
+      preloadedPayloadsRef.current = [];
+      preloadedEndpointsRef.current = [];
+      return;
+    }
     const m = preloadedMapping;
     setDataPointName(m.data_point || m.data_point_name || '');
     setCmsdEntity(m.cmsd_entity || 'Resource');
@@ -288,6 +309,14 @@ export default function MappingWizard({ onNavigateToQueue, preloadedMapping, onC
       runTypeValidation(mappingResult.mapping, cmsdEntity);
     }
   }, [mappingResult, cmsdEntity, phase, runTypeValidation]);
+
+  // Infer dependencies for current entity (authoring-time hint + Phase 2 display)
+  useEffect(() => {
+    agentApi.inferDependencies(cmsdEntity, {}).then(info => {
+      setInferredDeps(info.dependencies);
+      setIndepEntities(new Set(info.independent_entities));
+    }).catch(() => {});
+  }, [cmsdEntity]);
 
   useEffect(() => {
     agentApi.getSources()
@@ -936,7 +965,18 @@ export default function MappingWizard({ onNavigateToQueue, preloadedMapping, onC
                 </button>
               </div>
 
+              {/* ═══ Entity Selection Step ═══ */}
               <div style={{ marginTop: '20px', paddingTop: '18px', borderTop: '2px solid #475569' }}>
+                <label style={{ ...labelStyle, marginBottom: '8px' }}>What do you want to map?</label>
+
+                {/* Recommendation tiers */}
+                <EntityTierPicker
+                  cmsdEntity={cmsdEntity}
+                  onSelect={setCmsdEntity}
+                  existingEntities={existingEntities}
+                />
+
+                {/* Direct select fallback */}
                 <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
                   <div style={{ minWidth: '180px' }}>
                     <label style={labelStyle}>Data Point Name</label>
@@ -1126,6 +1166,33 @@ export default function MappingWizard({ onNavigateToQueue, preloadedMapping, onC
                   <span style={{ fontSize: '11px', color: '#fca5a5', background: '#7f1d1d', padding: '3px 8px', borderRadius: '4px' }}>{mappingResult.mapping.error}</span>
                 )}
               </div>
+
+              {/* ── Dependency hint row ── */}
+              {inferredDeps.length > 0 && (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: '8px',
+                  padding: '6px 12px', marginBottom: '10px',
+                  background: '#1e1b4b', borderRadius: '6px',
+                  border: '1px solid #3730a3',
+                }}>
+                  <span style={{ fontSize: '11px', color: '#a5b4fc', fontWeight: 600 }}>
+                    Depends on:
+                  </span>
+                  {inferredDeps.map(dep => (
+                    <span key={dep} style={{
+                      padding: '2px 8px', borderRadius: '10px',
+                      background: '#0f172a', color: '#93c5fd',
+                      fontSize: '11px', fontFamily: 'monospace',
+                      border: existingEntities.has(dep) ? '1px solid #22c55e' : '1px solid #f59e0b',
+                    }}>
+                      {dep} {existingEntities.has(dep) ? '✓' : '(not yet mapped)'}
+                    </span>
+                  ))}
+                  <span style={{ fontSize: '10px', color: '#64748b', marginLeft: 'auto' }}>
+                    Dependencies are inferred automatically
+                  </span>
+                </div>
+              )}
 
               {/* ── Expandable endpoint chips ── */}
               {endpointsExpanded && (
@@ -1442,6 +1509,144 @@ const CMSD_ENTITIES = [
   'Calendar', 'Shift', 'Break', 'Holiday', 'Connection',
   'Job', 'InventoryItem', 'MaintenancePlan',
 ];
+
+// Static dependency map: entity → list of entity types it depends on
+// Based on actual CMSD Pydantic model fields. In the CMSD standard, most
+// cross-entity references are via nested objects (e.g. Order.order_lines is
+// List[OrderLine], not a top-level FK). V1 maps only flat/top-level fields,
+// so most entities have NO direct dependencies. Dependencies are primarily
+// inferred from API field names (e.g. if an API returns "resource_id" in an
+// order payload, the LLM maps it and _infer_dependencies picks it up).
+const CMSD_ENTITY_DEPS: Record<string, string[]> = {
+  'Resource': [],
+  'ResourceClass': [],
+  'Calendar': [],
+  'Shift': [],
+  'Break': [],
+  'Holiday': [],
+  'PartType': [],
+  'Part': [],
+  'Connection': [],
+  'ProcessPlan': [],
+  'Process': [],
+  'Order': [],
+  'OrderLine': [],
+  'BillOfMaterials': [],
+  'BillOfMaterialsComponent': [],
+  'Job': [],
+  'InventoryItem': [],
+  'MaintenancePlan': [],
+};
+
+interface EntityTierPickerProps {
+  cmsdEntity: string;
+  onSelect: (entity: string) => void;
+  existingEntities: Set<string>;
+}
+
+function EntityTierPicker({ cmsdEntity, onSelect, existingEntities }: EntityTierPickerProps) {
+  const unmapped = (filter: (e: string) => boolean) =>
+    CMSD_ENTITIES.filter(e => filter(e) && !existingEntities.has(e));
+
+  const independent = CMSD_ENTITIES.filter(e => (CMSD_ENTITY_DEPS[e] || []).length === 0);
+  const dependent = CMSD_ENTITIES.filter(e => (CMSD_ENTITY_DEPS[e] || []).length > 0);
+
+  const readyDeps = dependent.filter(e => {
+    const deps = CMSD_ENTITY_DEPS[e] || [];
+    return deps.every(d => existingEntities.has(d));
+  });
+  const needsDeps = dependent.filter(e => {
+    const deps = CMSD_ENTITY_DEPS[e] || [];
+    return !deps.every(d => existingEntities.has(d));
+  });
+
+  return (
+    <div style={{
+      background: '#1e293b', borderRadius: '8px', border: '1px solid #334155',
+      padding: '12px 16px', marginBottom: '14px',
+    }}>
+      <div style={{ marginBottom: '6px' }}>
+        <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+          Recommendation: which entity to map next
+        </span>
+      </div>
+
+      {/* Independent — always ready */}
+      <div style={{ marginBottom: '8px' }}>
+        <span style={{ fontSize: '11px', color: '#86efac', fontWeight: 600 }}>✓ Ready (no dependencies)</span>
+        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
+          {unmapped(e => independent.includes(e)).slice(0, 8).map(e => (
+            <button key={e} onClick={() => onSelect(e)} style={{
+              padding: '3px 10px', borderRadius: '14px',
+              border: cmsdEntity === e ? '2px solid #22c55e' : '1px solid #166534',
+              background: cmsdEntity === e ? '#14532d' : 'transparent',
+              color: cmsdEntity === e ? '#86efac' : '#6ee7b7',
+              cursor: 'pointer', fontSize: '11px', fontWeight: cmsdEntity === e ? 700 : 500,
+            }}>
+              {e}
+            </button>
+          ))}
+          {existingEntities.size > 0 && independent.filter(e => existingEntities.has(e)).length > 0 && (
+            <span style={{ fontSize: '10px', color: '#475569', alignSelf: 'center' }}>
+              +{independent.filter(e => existingEntities.has(e)).length} already mapped
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Dependent but ready */}
+      {unmapped(e => readyDeps.includes(e)).length > 0 && (
+        <div style={{ marginBottom: '8px' }}>
+          <span style={{ fontSize: '11px', color: '#a5b4fc', fontWeight: 600 }}>
+            ◉ Ready (dependencies satisfied)
+          </span>
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
+            {unmapped(e => readyDeps.includes(e)).map(e => {
+              const deps = CMSD_ENTITY_DEPS[e] || [];
+              return (
+                <button key={e} onClick={() => onSelect(e)} style={{
+                  padding: '3px 10px', borderRadius: '14px',
+                  border: cmsdEntity === e ? '2px solid #818cf8' : '1px solid #3730a3',
+                  background: cmsdEntity === e ? '#1e1b4b' : 'transparent',
+                  color: cmsdEntity === e ? '#a5b4fc' : '#818cf8',
+                  cursor: 'pointer', fontSize: '11px', fontWeight: cmsdEntity === e ? 700 : 500,
+                }} title={`Depends on: ${deps.join(', ')}`}>
+                  {e}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Needs dependencies */}
+      {unmapped(e => needsDeps.includes(e)).length > 0 && (
+        <div style={{ marginBottom: '4px' }}>
+          <span style={{ fontSize: '11px', color: '#fde68a', fontWeight: 600 }}>
+            🔒 Needs dependencies first
+          </span>
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
+            {unmapped(e => needsDeps.includes(e)).map(e => {
+              const deps = CMSD_ENTITY_DEPS[e] || [];
+              const missing = deps.filter(d => !existingEntities.has(d));
+              return (
+                <button key={e} onClick={() => onSelect(e)} style={{
+                  padding: '3px 10px', borderRadius: '14px',
+                  border: cmsdEntity === e ? '2px solid #f59e0b' : '1px solid #78350f',
+                  background: cmsdEntity === e ? '#422006' : 'transparent',
+                  color: cmsdEntity === e ? '#fde68a' : '#fbbf24',
+                  cursor: 'pointer', fontSize: '11px', fontWeight: cmsdEntity === e ? 700 : 500,
+                }} title={`Needs: ${deps.join(', ')} (missing: ${missing.join(', ')})`}>
+                  {e}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 const codeChip: React.CSSProperties = {
   color: '#f1f5f9', background: '#1e293b', padding: '1px 6px', borderRadius: '3px', fontSize: '11px', fontFamily: 'monospace',

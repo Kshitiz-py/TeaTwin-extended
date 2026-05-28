@@ -9,13 +9,22 @@ import json
 import logging
 import os
 import sys
+import typing
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "cmsd-pydantic-master", "src"))
 from cmsd_schema.cmsd_document import CMSDDocument
-from cmsd_schema.resource_entities import Resource
+from cmsd_schema.resource_entities import Resource, ResourceClass
+from cmsd_schema.order_entities import Order, OrderLine
+from cmsd_schema.part_entities import Part, PartType, BillOfMaterials, BillOfMaterialsComponent
+from cmsd_schema.calendar_entities import Calendar, Shift, Break, Holiday
+from cmsd_schema.production_operations import Job
+from cmsd_schema.process_planning import ProcessPlan, Process
+from cmsd_schema.connection_entities import Connection
+from cmsd_schema.inventory_entities import InventoryItem
+from cmsd_schema.maintenance_entities import MaintenancePlan
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from shared.transform import execute_transformation
@@ -28,9 +37,25 @@ logger = logging.getLogger("cmsd-twin.mapping-factory")
 class MappingDrivenFactory:
     """Builds CMSD entity instances from mapping configuration at runtime."""
 
-    # Expanded in Slice 5.3
     ENTITY_REGISTRY: dict[str, type] = {
         "Resource": Resource,
+        "ResourceClass": ResourceClass,
+        "PartType": PartType,
+        "Part": Part,
+        "BillOfMaterials": BillOfMaterials,
+        "BillOfMaterialsComponent": BillOfMaterialsComponent,
+        "ProcessPlan": ProcessPlan,
+        "Process": Process,
+        "Order": Order,
+        "OrderLine": OrderLine,
+        "Calendar": Calendar,
+        "Shift": Shift,
+        "Break": Break,
+        "Holiday": Holiday,
+        "Connection": Connection,
+        "Job": Job,
+        "InventoryItem": InventoryItem,
+        "MaintenancePlan": MaintenancePlan,
     }
 
     _FIELD_TYPE_HINTS: dict[str, dict[str, type]] = {}
@@ -124,6 +149,7 @@ class MappingDrivenFactory:
                 logger.error(f"Fetch failed for {entity_type} from {url}: {last_error}")
                 report["fetch_errors"].append({
                     "entity_type": entity_type,
+                    "mapping_id": mid,
                     "endpoint": url,
                     "error": str(last_error),
                     "retries_exhausted": True,
@@ -136,6 +162,7 @@ class MappingDrivenFactory:
             if raw_items is None:
                 report["fetch_errors"].append({
                     "entity_type": entity_type,
+                    "mapping_id": mid,
                     "endpoint": url,
                     "error": f"count_path '{count_path}' not found in response",
                 })
@@ -175,7 +202,7 @@ class MappingDrivenFactory:
                     continue
                 api_path = config.get("api_path", "")
                 if not api_path:
-                    kwargs[cmsd_field] = None
+                    # No path mapped — let the model use its default value
                     continue
 
                 raw_value = self._resolve_path(item, api_path)
@@ -214,25 +241,50 @@ class MappingDrivenFactory:
                 instance._connection = conn_meta
                 instances.append(instance)
             except Exception as e:
-                logger.warning(f"Failed to construct {entity_type} (key={key_value}): {e}")
+                # Extract the specific field that failed from Pydantic errors
+                failed_fields = []
+                if hasattr(e, 'errors'):
+                    for err in e.errors():
+                        loc = err.get('loc', ())
+                        failed_fields.append('.'.join(str(p) for p in loc))
+                field_info = ', '.join(failed_fields) if failed_fields else str(e)
+                logger.warning(
+                    f"Failed to construct {entity_type} (key={key_value}): "
+                    f"fields=[{field_info}]"
+                )
                 warnings.append({
                     "entity_type": entity_type,
                     "instance_key": str(key_value or "?"),
-                    "field": "(constructor)",
+                    "field": failed_fields[0] if failed_fields else "(constructor)",
                     "api_path": str(e),
                 })
 
         return instances, warnings
 
     def _resolve_path(self, obj: Any, path: str) -> Any:
-        """Follow a dot-notation path into a dict."""
+        """Follow a dot-notation path into a dict (instance-relative).
+        As a safety net for legacy mappings, strips absolute JSONPath prefixes
+        where the array is at the first nesting level (e.g. $.resources[*].name).
+        For deeper nesting ($.d.results[*].field), rely on confirm-time normalization
+        in _normalize_api_paths."""
         if not obj or not path:
             return None
-        parts = path.split(".")
+
+        clean = path.replace("$.", "", 1) if path.startswith("$.") else path
+
+        parts = clean.split(".")
         cur = obj
-        for part in parts:
+        for i, part in enumerate(parts):
             if cur is None or not isinstance(cur, dict):
                 return None
+            # Skip array-access segments and the segment before them (the array name)
+            if part == "[*]" or part == "" or part.isdigit():
+                continue
+            if "[*]" in part:
+                continue
+            # For first segment after $., if the next segment is [*], skip both
+            if i == 0 and len(parts) > 1 and (parts[1] == "[*]" or "[*]" in parts[1]):
+                continue
             cur = cur.get(part)
         return cur
 
@@ -300,11 +352,15 @@ class MappingDrivenFactory:
         return value
 
     def _build_field_type_hints(self):
-        """Introspect Pydantic models to build field -> type mappings."""
+        """Introspect Pydantic models to build field -> type mappings.
+        Uses typing.get_type_hints() to resolve forward references (PEP 563)."""
         for entity_name, model_class in self.ENTITY_REGISTRY.items():
             hints = {}
-            for field_name, field_info in model_class.model_fields.items():
-                annotation = field_info.annotation
+            try:
+                resolved = typing.get_type_hints(model_class)
+            except Exception:
+                resolved = {}
+            for field_name, annotation in resolved.items():
                 if annotation is not None:
                     hints[field_name] = self._unwrap_optional(annotation)
             self._FIELD_TYPE_HINTS[entity_name] = hints
@@ -313,6 +369,17 @@ class MappingDrivenFactory:
         """Attach entity instances to the correct CMSDDocument field."""
         attr_map = {
             "Resource": "resources",
+            "ResourceClass": "resource_classes",
+            "PartType": "part_types",
+            "Part": "parts",
+            "BillOfMaterials": "bills_of_materials",
+            "Order": "orders",
+            "Calendar": "calendars",
+            "Connection": "connections",
+            "Job": "jobs",
+            "InventoryItem": "inventory_items",
+            "MaintenancePlan": "maintenance_plans",
+            "ProcessPlan": "process_plans",
         }
         attr_name = attr_map.get(entity_type)
         if attr_name:

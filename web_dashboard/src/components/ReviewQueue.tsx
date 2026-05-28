@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { agentApi, MappingSummary } from '../services/agentApi';
 import GenerateModal from './GenerateModal';
-import { RefreshReport } from '../services/api';
+import { api, RefreshReport, PreflightResult } from '../services/api';
 
 interface ReviewQueueProps {
   embedded?: boolean;
@@ -17,6 +17,15 @@ export default function ReviewQueue({ embedded = false, onGenerate, onEdit, onNa
   const [loading, setLoading] = useState(true);
   const [generateOpen, setGenerateOpen] = useState(false);
   const [generateIds, setGenerateIds] = useState<string[]>([]);
+
+  // Pre-flight state
+  const [preflightLoading, setPreflightLoading] = useState(false);
+  const [preflightResult, setPreflightResult] = useState<PreflightResult | null>(null);
+  const [showDepsPrompt, setShowDepsPrompt] = useState(false);
+  const [depsPromptInfo, setDepsPromptInfo] = useState<{
+    missing: Array<{ for_mapping: string; for_entity: string; needs: string; needs_entity: string }>;
+    autoSelectIds: string[];
+  } | null>(null);
 
   const loadMappings = useCallback(async () => {
     setLoading(true);
@@ -70,12 +79,62 @@ export default function ReviewQueue({ embedded = false, onGenerate, onEdit, onNa
     }
   };
 
-  const handleGenerate = () => {
-    if (selectedIds.size > 0) {
-      setGenerateIds(Array.from(selectedIds));
+  const handleGenerate = async () => {
+    if (selectedIds.size === 0) return;
+    const ids = Array.from(selectedIds);
+
+    // Run pre-flight before opening GenerateModal (hard block)
+    setPreflightLoading(true);
+    try {
+      const result = await api.validatePreflight(ids);
+      setPreflightResult(result);
+
+      if (!result.checks.dependencies.passed) {
+        // Show dependency auto-select prompt
+        const autoSelectIds = result.checks.dependencies.auto_selected || [];
+        const missing = result.checks.dependencies.missing || [];
+        setDepsPromptInfo({
+          missing,
+          autoSelectIds: [...new Set([...autoSelectIds, ...missing.map(m => m.needs)])],
+        });
+        setShowDepsPrompt(true);
+        setPreflightLoading(false);
+        return;
+      }
+
+      if (!result.passed) {
+        // Block on field coverage issues
+        setPreflightLoading(false);
+        alert('Cannot generate: some fields are not approved. Please edit the mappings and approve all fields.');
+        return;
+      }
+
+      setGenerateIds(ids);
       setGenerateOpen(true);
-      onGenerate?.(Array.from(selectedIds));
+      onGenerate?.(ids);
+    } catch (e: any) {
+      console.error('Pre-flight failed:', e);
+    } finally {
+      setPreflightLoading(false);
     }
+  };
+
+  const handleAcceptAutoSelect = () => {
+    if (!depsPromptInfo) return;
+    const newIds = depsPromptInfo.autoSelectIds;
+    setSelectedIds(prev => new Set([...prev, ...newIds]));
+    setShowDepsPrompt(false);
+    setDepsPromptInfo(null);
+
+    // Re-run with expanded selection
+    const expanded = [...new Set([...Array.from(selectedIds), ...newIds])];
+    setGenerateIds(expanded);
+    setGenerateOpen(true);
+  };
+
+  const handleDeclineAutoSelect = () => {
+    setShowDepsPrompt(false);
+    setDepsPromptInfo(null);
   };
 
   const handleCreateNew = () => {
@@ -288,13 +347,95 @@ export default function ReviewQueue({ embedded = false, onGenerate, onEdit, onNa
         </>
       )}
 
+      {/* Dependency Auto-Select Prompt */}
+      {showDepsPrompt && depsPromptInfo && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.7)', display: 'flex',
+          alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+        }}>
+          <div style={{
+            background: '#1e293b', borderRadius: '12px', border: '1px solid #334155',
+            padding: '24px', width: '480px',
+          }}>
+            <h3 style={{ color: '#f1f5f9', margin: '0 0 12px', fontSize: '16px' }}>
+              Missing Dependencies
+            </h3>
+            <div style={{ color: '#94a3b8', fontSize: '13px', marginBottom: '16px' }}>
+              {depsPromptInfo.missing.map((m, i) => {
+                const forMapping = mappings.find(mp => mp.id === m.for_mapping);
+                const needsMapping = mappings.find(mp => mp.id === m.needs);
+                return (
+                  <div key={i} style={{ marginBottom: '8px' }}>
+                    <strong style={{ color: '#f1f5f9' }}>"{forMapping?.data_point || m.for_entity}"</strong>
+                    {' '}({m.for_entity}) depends on{' '}
+                    <strong style={{ color: '#f1f5f9' }}>"{needsMapping?.data_point || m.needs_entity}"</strong>
+                    {' '}({m.needs_entity})
+                    {needsMapping ? (
+                      <span style={{ color: '#6ee7b7', fontSize: '11px', marginLeft: '6px' }}>— exists, not selected</span>
+                    ) : (
+                      <span style={{ color: '#fca5a5', fontSize: '11px', marginLeft: '6px' }}>— mapping does not exist yet</span>
+                    )}
+                  </div>
+                );
+              })}
+              {depsPromptInfo.autoSelectIds.filter(id => mappings.some(m => m.id === id)).length > 0 && (
+                <p style={{ color: '#93c5fd', fontSize: '12px', marginTop: '12px' }}>
+                  Auto-select {depsPromptInfo.autoSelectIds.length} additional mapping(s) to resolve dependencies?
+                </p>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button onClick={handleDeclineAutoSelect} style={{
+                padding: '8px 16px', borderRadius: '6px',
+                background: '#334155', border: 'none', color: '#94a3b8',
+                cursor: 'pointer', fontSize: '13px',
+              }}>
+                Cancel
+              </button>
+              <button onClick={handleAcceptAutoSelect}
+                disabled={depsPromptInfo.autoSelectIds.every(id => !mappings.some(m => m.id === id))}
+                style={{
+                  padding: '8px 16px', borderRadius: '6px',
+                  background: depsPromptInfo.autoSelectIds.every(id => !mappings.some(m => m.id === id)) ? '#334155' : '#7c3aed',
+                  border: 'none',
+                  color: depsPromptInfo.autoSelectIds.every(id => !mappings.some(m => m.id === id)) ? '#64748b' : '#fff',
+                  cursor: depsPromptInfo.autoSelectIds.every(id => !mappings.some(m => m.id === id)) ? 'not-allowed' : 'pointer',
+                  fontSize: '13px', fontWeight: 600,
+                }}>
+                Auto-select & Continue
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pre-flight loading overlay */}
+      {preflightLoading && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.5)', display: 'flex',
+          alignItems: 'center', justifyContent: 'center', zIndex: 999,
+        }}>
+          <div style={{
+            background: '#1e293b', borderRadius: '12px', padding: '24px',
+            display: 'flex', alignItems: 'center', gap: '12px',
+          }}>
+            <span style={{ display: 'inline-block', width: '20px', height: '20px', border: '2px solid #3b82f6', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
+            <span style={{ color: '#94a3b8', fontSize: '14px' }}>Running pre-flight check...</span>
+          </div>
+          <style>{'@keyframes spin { to { transform: rotate(360deg); } }'}</style>
+        </div>
+      )}
+
       {/* Generate Modal */}
       <GenerateModal
         open={generateOpen}
         mappingIds={generateIds}
-        onClose={() => setGenerateOpen(false)}
+        onClose={() => { setGenerateOpen(false); setPreflightResult(null); }}
         onComplete={(_report: RefreshReport) => { loadMappings(); }}
         onViewDashboard={onViewDashboard}
+        preflightResult={preflightResult}
       />
     </div>
   );

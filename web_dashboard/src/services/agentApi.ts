@@ -295,9 +295,11 @@ export const agentApi = {
       let buffer = '';
       while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
+        if (value) {
+          buffer += decoder.decode(value, { stream: true });
+        }
         const lines = buffer.split('\n');
+        // Only consume complete events — keep incomplete final line in buffer
         buffer = lines.pop() || '';
         let eventType = '';
         for (const line of lines) {
@@ -308,9 +310,16 @@ export const agentApi = {
               if (eventType === 'step') onStep(data);
               else if (eventType === 'result') onResult(data);
               else if (eventType === 'error') onError(data.message);
-            } catch {}
+            } catch (e) {
+              console.error('SSE parse error:', e, 'line:', line.slice(0, 100));
+            }
           }
         }
+        if (done) break;
+      }
+      // Process any remaining data in buffer after stream ends
+      if (buffer.trim()) {
+        console.warn('SSE stream ended with unprocessed data:', buffer.slice(0, 200));
       }
     }).catch((e) => {
       if (e.name !== 'AbortError') onError(e.message || 'Stream failed');
@@ -456,6 +465,22 @@ export const agentApi = {
   },
   async deleteMapping(id: string): Promise<{ success: boolean; message: string }> {
     const res = await fetch(`${BASE}/mappings/${id}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  },
+  // Dependency inference for mapping authoring
+  async inferDependencies(cmsdEntity: string, fieldMap: Record<string, any>): Promise<{
+    entity: string;
+    dependencies: string[];
+    is_independent: boolean;
+    independent_entities: string[];
+    all_entities: string[];
+  }> {
+    const res = await fetch(`${BASE}/mapping/infer-dependencies`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cmsd_entity: cmsdEntity, mapping: fieldMap }),
+    });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return res.json();
   },

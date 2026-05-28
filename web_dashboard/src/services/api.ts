@@ -17,7 +17,7 @@ export interface RefreshReport {
     generation: Record<string, { count: number; source: string }>;
     merge: { hardcoded_fallback: string[] };
   };
-  fetch_errors: Array<{ entity_type: string; endpoint: string; error: string }>;
+  fetch_errors: Array<{ entity_type: string; mapping_id?: string; endpoint: string; error: string }>;
   field_warnings: Array<{ entity_type: string; instance_key: string; field: string; api_path: string }>;
   changes_detected: number;
   elapsed_ms: number;
