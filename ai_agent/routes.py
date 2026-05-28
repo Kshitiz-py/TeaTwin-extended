@@ -560,6 +560,7 @@ async def chat_mapping(request: MappingChatRequest):
 class ReviewReanalyzeRequest(BaseModel):
     current_mapping: dict[str, Any]
     flagged_fields: list[dict[str, str]] = []
+    flagged_relations: list[dict[str, Any]] = []
     data_point_name: str = ""
     cmsd_entity: str = ""
     approved_payloads: list[ApprovedPayload] = []
@@ -594,6 +595,7 @@ async def review_reanalyze(request: ReviewReanalyzeRequest):
             cmsd_entity=request.cmsd_entity,
             current_mapping=request.current_mapping,
             flagged_fields=request.flagged_fields,
+            flagged_relations=request.flagged_relations,
             payload_analyses=payload_analyses if payload_analyses else None,
             rag_context=rag_context,
         )
@@ -835,6 +837,88 @@ def _normalize_api_paths(mapping: dict) -> dict:
             field_info["api_path"] = normalized
 
     return mapping
+
+
+@router.post("/mappings/manual")
+async def create_manual_mapping(request: dict):
+    """
+    Create a manual (non-API) mapping for an entity type. Used when referenced
+    entity instances are missing (e.g. no API provides ResourceClass data).
+    """
+    import time
+    from datetime import datetime, timezone
+    from .cmsd_catalog import get_catalog
+
+    catalog = get_catalog()
+    entity_type = request.get("entity_type", "")
+    if entity_type not in catalog.get("entities", {}):
+        raise HTTPException(400, f"Unknown entity type: {entity_type}")
+
+    entries: list[dict] = request.get("entries", [])
+    if not entries:
+        raise HTTPException(400, "At least one entry is required")
+
+    data_point = request.get("data_point", f"manual-{entity_type.lower()}")
+
+    # Build raw_payload from entries (each entry must have at least 'identifier')
+    raw_payload = []
+    for entry in entries:
+        if "identifier" not in entry:
+            raise HTTPException(400, "Each entry must have an 'identifier' field")
+        raw_payload.append(entry)
+
+    # Build field mappings: every key in the first entry maps 1:1 (relative paths)
+    field_map = {}
+    for key in entries[0].keys():
+        field_map[key] = {
+            "api_path": key,
+            "type_conversion": "none",
+            "sample_value": entries[0][key],
+            "confidence": "high",
+            "status": "approved",
+        }
+
+    mapping_id = f"manual-{entity_type.lower()}-{int(time.time() * 1000)}"
+    mapping = {
+        "data_point": data_point,
+        "data_point_name": data_point,
+        "cmsd_entity": entity_type,
+        "source": {"type": "manual"},
+        "endpoints": [
+            {
+                "endpoint": "(manual)",
+                "source_id": "manual",
+                "label": data_point,
+                "raw_payload": raw_payload,
+            }
+        ],
+        "mapping": field_map,
+        "relations": [],
+        "notes": f"Manual entries for {entity_type} — {len(entries)} instance(s).",
+        "requires_manual_review": False,
+    }
+
+    filepath = os.path.join(_mappings_dir(), f"{mapping_id}.json")
+    mapping["confirmed_at"] = datetime.now(timezone.utc).isoformat()
+    with open(filepath, "w", encoding="utf-8") as f:
+        json.dump(mapping, f, indent=2, default=str)
+
+    _mapping_queue[mapping_id] = {
+        "mapping_id": mapping_id,
+        "confirmed_at": mapping["confirmed_at"],
+        "mapping": mapping,
+        "data_point": data_point,
+        "cmsd_entity": entity_type,
+    }
+
+    logger.info(f"Manual mapping created: {mapping_id} ({entity_type}, {len(entries)} entries)")
+    return {
+        "success": True,
+        "mapping_id": mapping_id,
+        "cmsd_entity": entity_type,
+        "instance_count": len(entries),
+        "message": f"Manual {entity_type} mapping created with {len(entries)} instance(s)",
+    }
 
 
 @router.put("/mapping/{mapping_id}/confirm")

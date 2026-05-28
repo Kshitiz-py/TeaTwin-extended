@@ -19,6 +19,7 @@ export interface RefreshReport {
   };
   fetch_errors: Array<{ entity_type: string; mapping_id?: string; endpoint: string; error: string }>;
   field_warnings: Array<{ entity_type: string; instance_key: string; field: string; api_path: string }>;
+  relation_errors: Array<{ entity_type: string; instance_key?: string; field: string; error: string; relation?: string }>;
   changes_detected: number;
   elapsed_ms: number;
 }
@@ -40,6 +41,7 @@ export interface PreflightRelationIssue {
   relation_path: string;
   target_mapping_id: string;
   target_entity: string;
+  source_values: string[];
   resolved: boolean;
 }
 
@@ -81,6 +83,12 @@ export const api = {
 
   async getLayout() {
     const res = await fetch(`${BASE}/digital-twin/layout`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  },
+
+  async getConnections() {
+    const res = await fetch(`${BASE}/digital-twin/connections`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return res.json();
   },
@@ -127,4 +135,5 @@ export const api = {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return res.json();
   },
+
 };

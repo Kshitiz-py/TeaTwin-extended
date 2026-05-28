@@ -9,6 +9,7 @@ interface Resource {
   current_status: string | null;
   availability: number | null;
   capacity: number | null;
+  resource_class?: string | null;
   _connection?: ConnectionMetadata;
 }
 
@@ -89,7 +90,16 @@ export default function ResourcePanel() {
                   <p style={{ fontSize: '14px', fontWeight: 600, color: '#f1f5f9', margin: 0 }}>{r.name}</p>
                   <ConnectionIndicator entity={r} />
                 </div>
-                <p style={{ fontSize: '11px', color: '#64748b', margin: '2px 0 0' }}>{r.identifier} · {r.resource_type}</p>
+                <p style={{ fontSize: '11px', color: '#64748b', margin: '2px 0 0' }}>
+                  {r.identifier} · {r.resource_type}
+                  {r.resource_class && (
+                    <span style={{
+                      marginLeft: '8px', padding: '1px 8px', borderRadius: '8px',
+                      background: '#1e1b4b', color: '#a5b4fc', fontSize: '10px',
+                      border: '1px solid #3730a3', fontFamily: 'monospace',
+                    }}>{r.resource_class}</span>
+                  )}
+                </p>
               </div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>

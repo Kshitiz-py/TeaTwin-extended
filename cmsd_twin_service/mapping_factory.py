@@ -94,10 +94,14 @@ class MappingDrivenFactory:
     }
 
     _FIELD_TYPE_HINTS: dict[str, dict[str, type]] = {}
+    _REFERENCE_BY_CLASS: dict[type, str] = {}  # ReferenceClass -> identifier_field_name
 
     def __init__(self):
         self._mappings: list[dict] = []
         self._build_field_type_hints()
+        # Build reverse map: Reference class → identifier field name
+        for ref_class, id_field in self.REFERENCE_REGISTRY.values():
+            self._REFERENCE_BY_CLASS[ref_class] = id_field
 
     def load_mappings(self, mappings_dir: str = ".agent-mappings"):
         """Load all confirmed mapping JSON files."""
@@ -133,6 +137,7 @@ class MappingDrivenFactory:
             "entities": {},
             "fetch_errors": [],
             "field_warnings": [],
+            "relation_errors": [],
             "topological_order": [],
         }
 
@@ -159,49 +164,55 @@ class MappingDrivenFactory:
                 continue
 
             source = mapping.get("source", {})
-            url = f"{source.get('base_url', '')}{source.get('endpoint', '')}"
-            method = source.get("method", "GET")
-            auth = source.get("auth", {"type": "none"})
+            is_manual = source.get("type") == "manual"
 
-            # Fetch with retry (Slice 5.3 adds backoff)
-            response = None
-            last_error = None
-            for attempt in range(3):
-                try:
-                    response = await api_client.fetch(url, method, auth_config=auth)
-                    break
-                except Exception as e:
-                    last_error = e
-                    if attempt < 2:
-                        backoff = 2 ** attempt
-                        logger.warning(
-                            f"Fetch attempt {attempt+1} failed for {entity_type}: {e}. "
-                            f"Retrying in {backoff}s"
-                        )
-                        await asyncio.sleep(backoff)
+            if is_manual:
+                # Manual entities: use static raw_payload directly, skip API fetch
+                raw_items = mapping.get("endpoints", [{}])[0].get("raw_payload", [])
+            else:
+                url = f"{source.get('base_url', '')}{source.get('endpoint', '')}"
+                method = source.get("method", "GET")
+                auth = source.get("auth", {"type": "none"})
 
-            if response is None:
-                logger.error(f"Fetch failed for {entity_type} from {url}: {last_error}")
-                report["fetch_errors"].append({
-                    "entity_type": entity_type,
-                    "mapping_id": mid,
-                    "endpoint": url,
-                    "error": str(last_error),
-                    "retries_exhausted": True,
-                })
-                continue
+                # Fetch with retry (Slice 5.3 adds backoff)
+                response = None
+                last_error = None
+                for attempt in range(3):
+                    try:
+                        response = await api_client.fetch(url, method, auth_config=auth)
+                        break
+                    except Exception as e:
+                        last_error = e
+                        if attempt < 2:
+                            backoff = 2 ** attempt
+                            logger.warning(
+                                f"Fetch attempt {attempt+1} failed for {entity_type}: {e}. "
+                                f"Retrying in {backoff}s"
+                            )
+                            await asyncio.sleep(backoff)
 
-            # Extract entity array
-            count_path = mapping.get("instances", {}).get("count_path", "")
-            raw_items = self._extract_array(response, count_path)
-            if raw_items is None:
-                report["fetch_errors"].append({
-                    "entity_type": entity_type,
-                    "mapping_id": mid,
-                    "endpoint": url,
-                    "error": f"count_path '{count_path}' not found in response",
-                })
-                continue
+                if response is None:
+                    logger.error(f"Fetch failed for {entity_type} from {url}: {last_error}")
+                    report["fetch_errors"].append({
+                        "entity_type": entity_type,
+                        "mapping_id": mid,
+                        "endpoint": url,
+                        "error": str(last_error),
+                        "retries_exhausted": True,
+                    })
+                    continue
+
+                # Extract entity array
+                count_path = mapping.get("instances", {}).get("count_path", "")
+                raw_items = self._extract_array(response, count_path)
+                if raw_items is None:
+                    report["fetch_errors"].append({
+                        "entity_type": entity_type,
+                        "mapping_id": mid,
+                        "endpoint": url,
+                        "error": f"count_path '{count_path}' not found in response",
+                    })
+                    continue
 
             # Build entity instances
             instances, warnings = self._build_entity(mapping, raw_items)
@@ -209,9 +220,12 @@ class MappingDrivenFactory:
             self._attach_to_document(doc, entity_type, instances)
             report["entities"][entity_type] = {"count": len(instances), "source": "mapping"}
 
-        # Post-processing: resolve cross-entity relations
-        relation_warnings = self._resolve_relations(doc, id_to_mapping, report)
-        report["field_warnings"].extend(relation_warnings)
+        # Post-processing: resolve cross-entity relations (hard errors on failure)
+        relation_errors = self._resolve_relations(doc, id_to_mapping)
+        # Validate: every Reference field must point to an existing entity instance
+        ref_errors = self._validate_references(doc)
+        relation_errors.extend(ref_errors)
+        report["relation_errors"] = relation_errors
 
         return doc, report
 
@@ -238,6 +252,9 @@ class MappingDrivenFactory:
 
             for cmsd_field, config in field_map.items():
                 if not isinstance(config, dict):
+                    continue
+                # Skip relation-source passthrough fields — they're display-only, not CMSD fields
+                if config.get("_is_relation_source"):
                     continue
                 api_path = config.get("api_path", "")
                 if not api_path:
@@ -304,11 +321,14 @@ class MappingDrivenFactory:
 
     # ─── Relation Resolution (Issue 06) ──────────────────────────
 
-    def _resolve_relations(self, doc: CMSDDocument, id_to_mapping: dict,
-                           report: dict) -> list[dict]:
+    def _resolve_relations(self, doc: CMSDDocument, id_to_mapping: dict) -> list[dict]:
         """Post-processing pass: resolve cross-entity relations for all entities
-        that have a 'relations' array in their mapping JSON."""
-        warnings: list[dict] = []
+        that have a 'relations' array in their mapping JSON.
+
+        Returns a list of error dicts. An empty list means all relations resolved
+        successfully. Non-empty means the build has broken cross-entity references
+        and should be treated as failed."""
+        errors: list[dict] = []
         # Build lookup: entity_type → list of instances (from doc)
         doc_index = self._index_document(doc)
 
@@ -332,11 +352,11 @@ class MappingDrivenFactory:
                 source_transform = match_key.get("source", {}).get("transform")
 
                 if not target_entity or not cmsd_path or not source_api_path:
-                    warnings.append({
+                    errors.append({
                         "entity_type": entity_type,
                         "relation": f"{entity_type}→{target_entity}",
                         "field": "(relation)",
-                        "api_path": "incomplete relation definition",
+                        "error": "incomplete relation definition",
                     })
                     continue
 
@@ -356,11 +376,11 @@ class MappingDrivenFactory:
                     target_instances = doc_index.get(target_entity, [])
 
                 if not target_instances:
-                    warnings.append({
+                    errors.append({
                         "entity_type": entity_type,
                         "relation": f"{entity_type}→{target_entity}",
                         "field": target_mapping_id or target_entity,
-                        "api_path": f"target entity '{target_entity}' has no instances in document",
+                        "error": f"target entity '{target_entity}' has no instances in document — mapping may not exist",
                     })
                     continue
 
@@ -389,22 +409,22 @@ class MappingDrivenFactory:
 
                     matched = target_by_field.get(lookup_value)
                     if matched is None:
-                        warnings.append({
+                        errors.append({
                             "entity_type": entity_type,
                             "instance_key": str(getattr(instance, 'identifier', '?')),
                             "field": f"relation→{target_entity}",
-                            "api_path": f"no match for '{lookup_value}' in {target_entity}.{target_field}",
+                            "error": f"instance '{lookup_value}' not found in {target_entity}.{target_field} — check the {target_entity} mapping",
                         })
                         continue
 
                     # Build the reference object
                     reference = self._build_reference(target_entity, matched)
                     if reference is None:
-                        warnings.append({
+                        errors.append({
                             "entity_type": entity_type,
                             "instance_key": str(getattr(instance, 'identifier', '?')),
                             "field": f"relation→{target_entity}",
-                            "api_path": f"cannot build reference for {target_entity}",
+                            "error": f"cannot build reference object for {target_entity} — no reference class registered",
                         })
                         continue
 
@@ -412,14 +432,84 @@ class MappingDrivenFactory:
                     try:
                         self._deep_set_reference(instance, cmsd_path, reference, doc_index)
                     except Exception as e:
-                        warnings.append({
+                        errors.append({
                             "entity_type": entity_type,
                             "instance_key": str(getattr(instance, 'identifier', '?')),
                             "field": cmsd_path,
-                            "api_path": str(e),
+                            "error": f"failed to set reference at '{cmsd_path}': {e}",
                         })
 
-        return warnings
+        return errors
+
+    def _validate_references(self, doc: CMSDDocument) -> list[dict]:
+        """Post-build validation: check that every Reference field on every entity
+        points to an entity that actually exists in the document.
+
+        This catches cases where _coerce_type wraps a scalar into a Reference
+        object (e.g. 1 → ResourceClassReference(resource_class_identifier='1'))
+        but no target entity with that identifier exists."""
+        errors: list[dict] = []
+        doc_index = self._index_document(doc)
+        if not doc_index:
+            return errors
+
+        for entity_type, model_class in self.ENTITY_REGISTRY.items():
+            instances = doc_index.get(entity_type, [])
+            if not instances:
+                continue
+
+            # Get field → type hints for this entity
+            hints = self._FIELD_TYPE_HINTS.get(entity_type, {})
+            ref_fields = {
+                field_name: field_type
+                for field_name, field_type in hints.items()
+                if hasattr(field_type, '__name__') and field_type.__name__.endswith('Reference')
+            }
+
+            if not ref_fields:
+                continue
+
+            for instance in instances:
+                for field_name, field_type in ref_fields.items():
+                    ref_obj = getattr(instance, field_name, None)
+                    if ref_obj is None:
+                        continue
+
+                    # Extract the identifier from the reference object
+                    id_field = self._REFERENCE_BY_CLASS.get(field_type)
+                    if not id_field:
+                        continue
+                    ref_id = getattr(ref_obj, id_field, None)
+                    if ref_id is None:
+                        continue
+
+                    # Find the target entity type from REFERENCE_REGISTRY
+                    target_entity = None
+                    for entity_name, (ref_class, _) in self.REFERENCE_REGISTRY.items():
+                        if ref_class is field_type:
+                            target_entity = entity_name
+                            break
+
+                    if not target_entity:
+                        continue
+
+                    # Check if the referenced instance exists
+                    target_instances = doc_index.get(target_entity, [])
+                    found = any(
+                        str(getattr(t, 'identifier', '')) == str(ref_id)
+                        for t in target_instances
+                    )
+
+                    if not found:
+                        errors.append({
+                            "entity_type": entity_type,
+                            "instance_key": str(getattr(instance, 'identifier', '?')),
+                            "field": f"{field_name}→{target_entity}",
+                            "error": f"referenced {target_entity} '{ref_id}' does not exist — "
+                                     f"check the {target_entity} mapping or create a manual {target_entity}",
+                        })
+
+        return errors
 
     def _build_reference(self, target_entity: str, matched_instance: Any) -> Any | None:
         """Build a CMSD Reference object pointing to the matched entity instance."""
@@ -692,6 +782,29 @@ class MappingDrivenFactory:
             if type_name == "Duration":
                 from cmsd_schema.basic_structures import Duration
                 return Duration(unit="second", value=Decimal(str(value)))
+            if type_name == "Currency":
+                from cmsd_schema.basic_structures import Currency
+                if isinstance(value, dict):
+                    return Currency(**value)
+                return Currency(value=Decimal(str(value)))
+            if type_name == "GrossDimensions":
+                from cmsd_schema.basic_structures import GrossDimensions
+                if isinstance(value, dict):
+                    return GrossDimensions(**value)
+                return None
+            # Handle Reference types: scalar → ReferenceClass(identifier_field=value)
+            if type_name.endswith("Reference") and inner_type in self._REFERENCE_BY_CLASS:
+                id_field = self._REFERENCE_BY_CLASS[inner_type]
+                return inner_type(**{id_field: str(value)})
+
+            # Generic: any Pydantic BaseModel — pass dict through, coerce scalar to first required field
+            if hasattr(inner_type, 'model_fields') and isinstance(value, dict):
+                return inner_type(**value)
+            if hasattr(inner_type, 'model_fields') and not isinstance(value, dict):
+                fields = inner_type.model_fields
+                for fname, finfo in fields.items():
+                    if finfo.is_required() and finfo.annotation in (Decimal, float, int):
+                        return inner_type(**{fname: Decimal(str(value))})
             if inner_type is int:
                 return int(float(value))
             if inner_type is float:

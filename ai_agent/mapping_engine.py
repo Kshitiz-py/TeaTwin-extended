@@ -21,33 +21,15 @@ from .rag.retriever import retriever
 logger = logging.getLogger("ai-agent.mapping-engine")
 
 
-# Known CMSD entities and their key fields (for validation)
-CMSD_ENTITY_FIELDS: dict[str, list[str]] = {
-    "Resource": ["identifier", "name", "description", "resource_type", "capacity",
-                 "availability", "mttr", "mtbf", "mcbf", "reliability",
-                 "cycle_time", "size", "decision_rule", "routing_rule",
-                 "transport_capacity", "worker_count", "current_status"],
-    "ResourceClass": ["identifier", "name", "description", "resource_type"],
-    "PartType": ["identifier", "name", "description", "size", "weight"],
-    "Part": ["identifier", "production_status", "size"],
-    "BillOfMaterials": ["identifier", "name", "description", "components"],
-    "BOMComponent": ["identifier", "quantity"],
-    "ProcessPlan": ["identifier", "name", "description", "processes"],
-    "Process": ["identifier", "name", "description", "duration",
-                "setup_time", "load_time", "unload_time"],
-    "Order": ["identifier", "status", "due_date", "release_date", "order_lines"],
-    "OrderLine": ["identifier", "status", "due_date", "release_date",
-                  "quantity", "part_description"],
-    "Calendar": ["identifier", "name", "description", "production_days_per_year",
-                 "shifts", "holidays"],
-    "Shift": ["identifier", "day_of_week", "start_time", "end_time", "breaks"],
-    "Break": ["identifier", "start_time", "end_time"],
-    "Holiday": ["identifier", "holiday_date"],
-    "Connection": ["identifier", "from_resource_id", "to_resource_id", "connection_type"],
-    "Job": ["identifier", "status", "priority", "start_time", "planned_effort"],
-    "InventoryItem": ["identifier", "quantity"],
-    "MaintenancePlan": ["identifier", "name", "description"],
-}
+def _get_entity_field_names(cmsd_entity: str) -> list[str]:
+    """Return all CMSD field names for an entity, derived from the dynamic catalog."""
+    from .cmsd_catalog import get_catalog
+    catalog = get_catalog()
+    entity = catalog.get("entities", {}).get(cmsd_entity)
+    if not entity:
+        return []
+    # Exclude private/internal fields
+    return [f["name"] for f in entity.get("fields", []) if not f["name"].startswith("_")]
 
 
 class MappingEngine:
@@ -177,17 +159,19 @@ class MappingEngine:
         flagged_fields: list[dict[str, str]],
         payload_analyses: list[dict[str, Any]] | None = None,
         rag_context: str | None = None,
+        flagged_relations: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         """
-        Targeted reanalysis: only refine fields the user has flagged.
+        Targeted reanalysis: only refine fields AND relations the user has flagged.
         flagged_fields is [{"field": "cycle_time", "comment": "use seconds"}, ...].
-        Returns the full mapping with only flagged fields updated.
+        flagged_relations is [{"index": 0, "relation": {...}, "comment": "..."}, ...].
+        Returns the full mapping with only flagged items updated.
         """
-        if not flagged_fields:
+        if not flagged_fields and not flagged_relations:
             return current_mapping
 
         context = rag_context or ""
-        cmsd_fields = CMSD_ENTITY_FIELDS.get(cmsd_entity, [])
+        cmsd_fields = _get_entity_field_names(cmsd_entity)
 
         flagged_desc = "\n".join(
             f"  - {f['field']}: {f.get('comment', '(no comment)')}"
@@ -195,22 +179,53 @@ class MappingEngine:
         )
         flagged_names = {f["field"] for f in flagged_fields}
 
+        # Build relation guidance
+        relation_guidance = ""
+        if flagged_relations:
+            rel_lines = []
+            for fr in flagged_relations:
+                rel = fr.get("relation", {})
+                comment = fr.get("comment", "")
+                rel_lines.append(
+                    f"  - Relation #{fr.get('index', '?')}: {rel.get('match_key', {}).get('source', {}).get('api_path', '?')}"
+                    f" → {rel.get('target_entity', '?')}"
+                    f" (cmsd_path: {rel.get('cmsd_path', '?')})"
+                    f"{' — ' + comment if comment else ''}"
+                )
+            relation_guidance = (
+                "\n## Flagged Relations (cross-entity references):\n"
+                + "\n".join(rel_lines) + "\n"
+                "For each flagged relation: verify the target_entity is correct, check the cmsd_path "
+                "points to the right nested field in the CMSD model, and confirm the source api_path "
+                "exists in the payload. Update the relation fields as needed. "
+                "Keep relations that are correct unchanged. Remove relations that should not exist.\n"
+            )
+
         # Only include the flagged fields + surrounding context in the prompt
         relevant_mapping = {
             k: v for k, v in current_mapping.get("mapping", {}).items()
             if k in flagged_names
         }
 
+        # Include current relations if any are flagged
+        relevant_relations = ""
+        if flagged_relations:
+            relevant_relations = "\n## Current Relations:\n" + json.dumps(
+                current_mapping.get("relations", []), indent=2
+            ) + "\n"
+
         system_prompt = (
             "You are an expert manufacturing data mapping engine. "
-            "Your task is to REFINE specific field mappings based on user feedback.\n\n"
+            "Your task is to REFINE specific field mappings and cross-entity relations based on user feedback.\n\n"
             "CRITICAL RULES:\n"
             "1. ONLY return the fields listed under 'Flagged Fields' below. Do NOT return any other fields.\n"
             "2. Use the user's comment for each field as guidance for how to fix the mapping.\n"
             "3. type_conversion MUST be 'none' for every field. converted_value MUST equal raw_value.\n"
             "4. Set confidence to 'manual' for all returned fields.\n"
-            "5. Look carefully at the API payload to find the correct field path.\n\n"
-            "Output format: JSON with ONLY the changed fields in the mapping:\n"
+            "5. Look carefully at the API payload to find the correct field path.\n"
+            "6. If flagged relations are listed, also return a refined 'relations' array that addresses the user's concerns.\n"
+            "7. Fields referenced in relations MUST also appear in the mapping — relations are ADDITIONAL annotations.\n\n"
+            "Output format: JSON with ONLY the changed fields and/or relations:\n"
             '{\n'
             '  "mapping": {\n'
             '    "cmsd_field_name": {\n'
@@ -222,6 +237,7 @@ class MappingEngine:
             '      "source_endpoint": "which endpoint"\n'
             '    }\n'
             '  },\n'
+            '  "relations": [ ... ],\n'
             '  "notes": "brief summary of what was changed"\n'
             '}\n\n'
             "IMPORTANT: Output ONLY the JSON object. No markdown, no explanation."
@@ -239,9 +255,11 @@ class MappingEngine:
             f"## Flagged Fields (ONLY fix these):\n{flagged_desc}\n\n"
             f"## Current mappings for flagged fields:\n"
             f"{json.dumps(relevant_mapping, indent=2)}\n\n"
+            f"{relevant_relations}"
+            f"{relation_guidance}"
             f"## API Payload Data:\n{payload_info}\n\n"
             f"## RAG Context:\n{context[:1500]}\n\n"
-            f"Refine ONLY the flagged fields based on the user comments. "
+            f"Refine ONLY the flagged fields and/or relations based on the user comments. "
             f"Find the correct api_path in the payload data."
         )
 
@@ -289,9 +307,12 @@ class MappingEngine:
 
         merged["mapping"] = merged_mapping
         merged["unmapped_fields"] = [
-            f for f in CMSD_ENTITY_FIELDS.get(cmsd_entity, [])
+            f for f in _get_entity_field_names(cmsd_entity)
             if f not in merged_mapping
         ]
+        # Merge relations if LLM returned refined ones
+        if "relations" in llm_result and isinstance(llm_result["relations"], list):
+            merged["relations"] = llm_result["relations"]
         merged["notes"] = llm_result.get("notes", merged.get("notes", ""))
         return merged
 
@@ -311,7 +332,7 @@ class MappingEngine:
         produces a refined mapping proposal, only changing what the user asked.
         """
         context = rag_context or ""
-        cmsd_fields = CMSD_ENTITY_FIELDS.get(cmsd_entity, [])
+        cmsd_fields = _get_entity_field_names(cmsd_entity)
         fields_str = "\n".join(f"  - {f}" for f in cmsd_fields)
 
         system_prompt = (
@@ -354,7 +375,7 @@ class MappingEngine:
         user_prompt = (
             f"## Data Point: {data_point_name}\n"
             f"## Target CMSD Entity: {cmsd_entity}\n"
-            f"## Required CMSD Fields:\n{fields_str}\n\n"
+            f"## All CMSD Fields (map every field that has data in the payload):\n{fields_str}\n\n"
             f"## Current Mapping (preserve unless user says otherwise):\n"
             f"{json.dumps(current_mapping, indent=2)}\n\n"
             f"## Available API Payloads:{endpoints_info}\n\n"
@@ -408,7 +429,7 @@ class MappingEngine:
         merged["mapping"] = merged_mapping
         merged["notes"] = llm_result.get("notes", merged.get("notes", ""))
         merged["unmapped_fields"] = [
-            f for f in CMSD_ENTITY_FIELDS.get(cmsd_entity, [])
+            f for f in _get_entity_field_names(cmsd_entity)
             if f not in merged_mapping
         ]
         merged["requires_manual_review"] = len(merged["unmapped_fields"]) > 0
@@ -455,7 +476,10 @@ class MappingEngine:
             "references Resource, 'bom_id' likely references BillOfMaterials), propose a 'relations' array. "
             "Use the RAG context to determine the correct CMSD nested path (cmsd_path) where the reference "
             "lives in the target entity model. Only propose relations where you are reasonably confident "
-            "(confidence 'high' or 'medium'). If no cross-entity references are detected, omit relations.\n\n"
+            "(confidence 'high' or 'medium'). If no cross-entity references are detected, omit relations.\n"
+            "IMPORTANT: The referenced field MUST remain in the 'mapping' object too. Relations are an "
+            "ADDITIONAL annotation — do NOT remove the field from 'mapping' just because it appears in "
+            "'relations'. The field should exist in BOTH places.\n\n"
             "Output format: JSON with this structure:\n"
             '{\n'
             '  "data_point": "string",\n'
@@ -516,7 +540,10 @@ class MappingEngine:
             "10. CROSS-ENTITY RELATIONS: If you detect fields across ANY payload that appear to reference "
             "OTHER CMSD entities (e.g., 'part_type_id' likely references PartType, 'resource_id' likely "
             "references Resource), propose a 'relations' array. Use the RAG context to determine the correct "
-            "CMSD nested path (cmsd_path). Only propose where confidence is 'high' or 'medium'.\n\n"
+            "CMSD nested path (cmsd_path). Only propose where confidence is 'high' or 'medium'.\n"
+            "IMPORTANT: The referenced field MUST remain in the 'mapping' object too. Relations are an "
+            "ADDITIONAL annotation — do NOT remove the field from 'mapping' just because it appears in "
+            "'relations'. The field should exist in BOTH places.\n\n"
             "Output format: JSON with this structure:\n"
             '{\n'
             '  "data_point": "string",\n'
@@ -563,13 +590,13 @@ class MappingEngine:
         payload_analysis: dict,
         rag_context: str,
     ) -> str:
-        cmsd_fields = CMSD_ENTITY_FIELDS.get(cmsd_entity, [])
+        cmsd_fields = _get_entity_field_names(cmsd_entity)
         fields_str = "\n".join(f"  - {f}" for f in cmsd_fields)
 
         return (
             f"## Data Point: {data_point_name}\n"
             f"## Target CMSD Entity: {cmsd_entity}\n"
-            f"## Required CMSD Fields:\n{fields_str}\n\n"
+            f"## All CMSD Fields (map every field that has data in the payload):\n{fields_str}\n\n"
             f"## API Endpoint: {api_endpoint}\n\n"
             f"## RAG Context (from knowledge base):\n{rag_context[:2000]}\n\n"
             f"## Live API Payload Analysis:\n"
@@ -585,13 +612,13 @@ class MappingEngine:
         payload_analyses: list[dict[str, Any]],
         rag_context: str,
     ) -> str:
-        cmsd_fields = CMSD_ENTITY_FIELDS.get(cmsd_entity, [])
+        cmsd_fields = _get_entity_field_names(cmsd_entity)
         fields_str = "\n".join(f"  - {f}" for f in cmsd_fields)
 
         parts = [
             f"## Data Point: {data_point_name}",
             f"## Target CMSD Entity: {cmsd_entity}",
-            f"## Required CMSD Fields:\n{fields_str}\n",
+            f"## All CMSD Fields (map every field that has data in the payload):\n{fields_str}\n",
             f"## RAG Context (from knowledge base):\n{rag_context[:2000]}\n",
         ]
 
@@ -610,7 +637,7 @@ class MappingEngine:
         Adds confidence flags and marks unmapped required fields.
         Extracts instances block (count_path, key_field) from LLM response.
         """
-        known_fields = CMSD_ENTITY_FIELDS.get(cmsd_entity, [])
+        known_fields = _get_entity_field_names(cmsd_entity)
         mapping = proposed.get("mapping", {})
 
         instances_raw = proposed.get("instances", {})
@@ -679,6 +706,23 @@ class MappingEngine:
                     "confidence": "medium",
                     "source_endpoint": "",
                     "transformation": None,
+                }
+
+        # Inject relation source fields into mapping so they remain visible in the field table.
+        # The field table is the source of truth — relations are annotations, not replacements.
+        for rel in validated_relations:
+            src_path = rel.get("match_key", {}).get("source", {}).get("api_path", "")
+            if src_path and src_path not in validated["mapping"]:
+                validated["mapping"][src_path] = {
+                    "api_path": src_path,
+                    "type_conversion": "none",
+                    "raw_value": "",
+                    "converted_value": "",
+                    "sample_value": "",
+                    "confidence": "high",
+                    "source_endpoint": "",
+                    "transformation": None,
+                    "_is_relation_source": True,
                 }
 
         # Find unmapped known fields

@@ -9,9 +9,10 @@ interface ReviewQueueProps {
   onEdit?: (mappingId: string) => void | Promise<void>;
   onNavigateToExplorer?: () => void;
   onViewDashboard?: () => void;
+  onCreateManual?: (entityType: string, identifiers: string[]) => void;
 }
 
-export default function ReviewQueue({ embedded = false, onGenerate, onEdit, onNavigateToExplorer, onViewDashboard }: ReviewQueueProps) {
+export default function ReviewQueue({ embedded = false, onGenerate, onEdit, onNavigateToExplorer, onViewDashboard, onCreateManual }: ReviewQueueProps) {
   const [mappings, setMappings] = useState<MappingSummary[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
@@ -89,31 +90,13 @@ export default function ReviewQueue({ embedded = false, onGenerate, onEdit, onNa
       const result = await api.validatePreflight(ids);
       setPreflightResult(result);
 
-      if (!result.checks.dependencies.passed || !result.checks.relations?.passed) {
-        // Show dependency auto-select prompt (includes relation missing targets)
+      if (!result.checks.dependencies.passed) {
+        // Show dependency auto-select prompt
         const autoSelectIds = result.checks.dependencies?.auto_selected || [];
         const missingDeps = result.checks.dependencies?.missing || [];
-        const missingRels = result.checks.relations?.missing_targets || [];
-        // Convert relation issues to match dependency prompt format
-        const allMissing = [
-          ...missingDeps,
-          ...missingRels.map(r => ({
-            for_mapping: r.for_mapping,
-            for_entity: r.for_entity,
-            needs: r.target_mapping_id,
-            needs_entity: r.target_entity,
-            is_relation: true,
-            relation_path: r.relation_path,
-          })),
-        ];
-        const allAutoSelect = [...new Set([
-          ...autoSelectIds,
-          ...missingDeps.map((m: any) => m.needs),
-          ...missingRels.map((r: any) => r.target_mapping_id).filter(Boolean),
-        ])];
         setDepsPromptInfo({
-          missing: allMissing as any,
-          autoSelectIds: allAutoSelect as any,
+          missing: missingDeps as any,
+          autoSelectIds: autoSelectIds as any,
         });
         setShowDepsPrompt(true);
         setPreflightLoading(false);
@@ -394,9 +377,20 @@ export default function ReviewQueue({ embedded = false, onGenerate, onEdit, onNa
             background: '#1e293b', borderRadius: '12px', border: '1px solid #334155',
             padding: '24px', width: '480px',
           }}>
-            <h3 style={{ color: '#f1f5f9', margin: '0 0 12px', fontSize: '16px' }}>
-              Missing Dependencies
-            </h3>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+              <h3 style={{ color: '#f1f5f9', margin: 0, fontSize: '16px' }}>Missing Dependencies</h3>
+              <button
+                onClick={handleDeclineAutoSelect}
+                style={{
+                  width: '28px', height: '28px', borderRadius: '6px', border: '1px solid #334155',
+                  background: 'transparent', color: '#94a3b8', fontSize: '14px', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1,
+                  transition: 'all 0.15s',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = '#334155'; e.currentTarget.style.color = '#f1f5f9'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#94a3b8'; }}
+              >✕</button>
+            </div>
             <div style={{ color: '#94a3b8', fontSize: '13px', marginBottom: '16px' }}>
               {depsPromptInfo.missing.map((m: any, i: number) => {
                 const forMapping = mappings.find(mp => mp.id === m.for_mapping);
@@ -439,7 +433,7 @@ export default function ReviewQueue({ embedded = false, onGenerate, onEdit, onNa
                 </p>
               )}
             </div>
-            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
               <button onClick={handleDeclineAutoSelect} style={{
                 padding: '8px 16px', borderRadius: '6px',
                 background: '#334155', border: 'none', color: '#94a3b8',
@@ -447,6 +441,23 @@ export default function ReviewQueue({ embedded = false, onGenerate, onEdit, onNa
               }}>
                 Cancel
               </button>
+              {/* "Create Manually" for relation items where target mapping doesn't exist */}
+              {depsPromptInfo.missing.some((m: any) => m.is_relation && !mappings.some(mp => mp.id === m.needs)) && (
+                <button onClick={() => {
+                  const relItem = depsPromptInfo.missing.find((m: any) => m.is_relation && !mappings.some(mp => mp.id === m.needs));
+                  if (relItem && onCreateManual) {
+                    setShowDepsPrompt(false);
+                    setDepsPromptInfo(null);
+                    onCreateManual(relItem.needs_entity, relItem.source_values || []);
+                  }
+                }} style={{
+                  padding: '8px 16px', borderRadius: '6px',
+                  background: '#b45309', border: '1px solid #d97706',
+                  color: '#fde68a', cursor: 'pointer', fontSize: '13px', fontWeight: 600,
+                }}>
+                  Create Manually
+                </button>
+              )}
               <button onClick={handleAcceptAutoSelect}
                 disabled={depsPromptInfo.autoSelectIds.every(id => !mappings.some(m => m.id === id))}
                 style={{
@@ -490,6 +501,7 @@ export default function ReviewQueue({ embedded = false, onGenerate, onEdit, onNa
         onComplete={(_report: RefreshReport) => { loadMappings(); }}
         onViewDashboard={onViewDashboard}
         preflightResult={preflightResult}
+        onCreateManual={onCreateManual}
       />
     </div>
   );

@@ -70,10 +70,17 @@ export default function QuickEditModal({ mapping, onClose, onSave }: QuickEditMo
               {mapping?.cmsd_entity} · {fieldNames.length} fields
             </p>
           </div>
-          <button onClick={onClose}
-            style={{ padding: '4px 10px', borderRadius: '4px', background: '#334155', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '14px' }}>
-            ✕
-          </button>
+          <button
+            onClick={onClose}
+            style={{
+              width: '28px', height: '28px', borderRadius: '6px', border: '1px solid #334155',
+              background: 'transparent', color: '#94a3b8', fontSize: '14px', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1,
+              transition: 'all 0.15s',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = '#334155'; e.currentTarget.style.color = '#f1f5f9'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#94a3b8'; }}
+          >✕</button>
         </div>
 
         {fieldNames.length === 0 ? (

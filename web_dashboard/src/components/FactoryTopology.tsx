@@ -23,6 +23,14 @@ interface LayoutData {
   placements: Placement[];
 }
 
+interface ConnectionData {
+  identifier: string;
+  name: string | null;
+  from_resource: string | null;
+  to_resource: string | null;
+  connection_type: string | null;
+}
+
 interface Props {
   events: any[];
 }
@@ -40,49 +48,49 @@ const statusColor = (s: string | null): string => {
   }
 };
 
+const connTypeColor = (t: string | null): string => {
+  switch (t) {
+    case 'conveyor': return '#06b6d4';
+    case 'path': return '#8b5cf6';
+    default: return '#475569';
+  }
+};
+
 export default function FactoryTopology({ events }: Props) {
   const [resources, setResources] = useState<ResourceStatus[]>([]);
   const [layout, setLayout] = useState<LayoutData | null>(null);
+  const [connections, setConnections] = useState<ConnectionData[]>([]);
   const [statusMap, setStatusMap] = useState<Record<string, string | null>>({});
+  const [showConnections, setShowConnections] = useState(true);
 
   useEffect(() => {
-    // Fetch resources
     api.getResources().then((data: ResourceStatus[]) => {
       setResources(data);
       const map: Record<string, string | null> = {};
-      data.forEach((r: ResourceStatus) => {
-        map[r.identifier] = r.current_status;
-      });
+      data.forEach((r: ResourceStatus) => { map[r.identifier] = r.current_status; });
       setStatusMap(map);
     }).catch(() => {});
 
-    // Fetch layout with placements from the CMSD digital twin
-    api.getLayout().then((data: LayoutData) => {
-      setLayout(data);
-    }).catch(() => {});
+    api.getLayout().then((data: LayoutData) => { setLayout(data); }).catch(() => {});
+
+    api.getConnections().then((data: ConnectionData[]) => { setConnections(data); }).catch(() => {});
   }, []);
 
-  // Update statuses from WebSocket events
   useEffect(() => {
     if (events.length === 0) return;
     const latest = events[0];
     if (latest.entity_type === 'resource' && latest.field_name === 'current_status') {
-      setStatusMap(prev => ({
-        ...prev,
-        [latest.entity_identifier]: latest.new_value,
-      }));
+      setStatusMap(prev => ({ ...prev, [latest.entity_identifier]: latest.new_value }));
     }
   }, [events]);
 
-  // Build a position map from the live CMSD layout placements
   const positionMap: Record<string, { x: number; y: number }> = {};
-  if (layout && layout.placements) {
+  if (layout?.placements) {
     for (const p of layout.placements) {
       positionMap[p.resource_identifier] = { x: p.x, y: p.y };
     }
   }
 
-  // Compute bounds dynamically from the actual placement data
   const positions = Object.values(positionMap);
   const minX = positions.length > 0 ? Math.min(...positions.map(p => p.x)) : 0;
   const maxX = positions.length > 0 ? Math.max(...positions.map(p => p.x)) : 30;
@@ -92,6 +100,11 @@ export default function FactoryTopology({ events }: Props) {
   const rangeY = maxY - minY || 30;
   const padding = 3;
 
+  // Filter connections where both endpoints have placement data
+  const visibleConnections = connections.filter(
+    c => c.from_resource && c.to_resource && positionMap[c.from_resource] && positionMap[c.to_resource]
+  );
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
@@ -99,21 +112,64 @@ export default function FactoryTopology({ events }: Props) {
           Factory Floor Layout
           {layout && <span style={{ fontSize: '13px', fontWeight: 400, color: '#64748b', marginLeft: '8px' }}>— {layout.name}</span>}
         </h3>
+        {connections.length > 0 && (
+          <button
+            onClick={() => setShowConnections(!showConnections)}
+            style={{
+              padding: '5px 12px', borderRadius: '6px', border: '1px solid #334155',
+              background: showConnections ? '#1e3a5f' : 'transparent',
+              color: showConnections ? '#93c5fd' : '#64748b',
+              cursor: 'pointer', fontSize: '11px', fontWeight: 500,
+            }}
+          >
+            {showConnections ? 'Hide Connections' : `Show Connections (${connections.length})`}
+          </button>
+        )}
       </div>
 
       <div style={{
-        position: 'relative',
-        width: '100%',
-        height: '500px',
-        background: '#0f172a',
-        border: '1px solid #334155',
-        borderRadius: '8px',
-        overflow: 'hidden',
+        position: 'relative', width: '100%', height: '500px',
+        background: '#0f172a', border: '1px solid #334155',
+        borderRadius: '8px', overflow: 'hidden',
       }}>
-        {/* Resource nodes — positioned from CMSD layout data */}
+        {/* Connection edges (SVG layer) */}
+        {showConnections && visibleConnections.length > 0 && (
+          <svg style={{
+            position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
+            pointerEvents: 'none', zIndex: 5,
+          }}>
+            {visibleConnections.map(c => {
+              const from = positionMap[c.from_resource!];
+              const to = positionMap[c.to_resource!];
+              const x1 = ((from.x - minX + padding) / (rangeX + padding * 2)) * 100;
+              const y1 = ((from.y - minY + padding) / (rangeY + padding * 2)) * 100;
+              const x2 = ((to.x - minX + padding) / (rangeX + padding * 2)) * 100;
+              const y2 = ((to.y - minY + padding) / (rangeY + padding * 2)) * 100;
+              const color = connTypeColor(c.connection_type);
+
+              return (
+                <g key={c.identifier}>
+                  <line
+                    x1={`${x1}%`} y1={`${y1}%`}
+                    x2={`${x2}%`} y2={`${y2}%`}
+                    stroke={color} strokeWidth="1.5" opacity="0.5"
+                    strokeDasharray={c.connection_type === 'path' ? '4,3' : 'none'}
+                  />
+                  {/* Arrowhead at midpoint */}
+                  <circle
+                    cx={`${(x1 + x2) / 2}%`} cy={`${(y1 + y2) / 2}%`}
+                    r="3" fill={color} opacity="0.7"
+                  />
+                </g>
+              );
+            })}
+          </svg>
+        )}
+
+        {/* Resource nodes */}
         {resources.map(r => {
           const pos = positionMap[r.identifier];
-          if (!pos) return null; // skip resources without placement data
+          if (!pos) return null;
 
           const color = statusColor(statusMap[r.identifier] ?? r.current_status);
           const leftPct = ((pos.x - minX + padding) / (rangeX + padding * 2)) * 100;
@@ -125,15 +181,13 @@ export default function FactoryTopology({ events }: Props) {
               title={`${r.name} — ${statusMap[r.identifier] ?? r.current_status ?? 'unknown'} (${pos.x}, ${pos.y})`}
               style={{
                 position: 'absolute',
-                left: `${leftPct}%`,
-                top: `${topPct}%`,
+                left: `${leftPct}%`, top: `${topPct}%`,
                 width: '22px', height: '22px',
                 background: color,
                 borderRadius: r.resource_type === 'employee' ? '50%' : '4px',
                 border: '2px solid #f1f5f9',
                 transform: 'translate(-50%, -50%)',
-                cursor: 'pointer',
-                transition: 'background 0.3s',
+                cursor: 'pointer', transition: 'background 0.3s',
                 zIndex: 10,
                 boxShadow: `0 0 8px ${color}80`,
               }}
@@ -154,7 +208,7 @@ export default function FactoryTopology({ events }: Props) {
       </div>
 
       {/* Legend */}
-      <div style={{ display: 'flex', gap: '16px', marginTop: '12px', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: '16px', marginTop: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
         {[
           { label: 'Busy', color: '#3b82f6' },
           { label: 'Idle', color: '#22c55e' },
@@ -168,10 +222,21 @@ export default function FactoryTopology({ events }: Props) {
             {item.label}
           </div>
         ))}
+        {connections.length > 0 && (
+          <>
+            <span style={{ color: '#334155' }}>|</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#cbd5e1' }}>
+              <span style={{ width: '12px', height: '2px', background: '#06b6d4', display: 'inline-block' }} />
+              Connections ({connections.length})
+            </span>
+          </>
+        )}
       </div>
 
       <div style={{ marginTop: '12px', fontSize: '12px', color: '#64748b' }}>
-        {resources.length} resources • {Object.keys(positionMap).length} with placement data • Live updates via WebSocket
+        {resources.length} resources · {Object.keys(positionMap).length} with placement data
+        {connections.length > 0 && ` · ${visibleConnections.length} connections shown`}
+        {' · Live updates via WebSocket'}
       </div>
     </div>
   );

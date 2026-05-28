@@ -156,8 +156,12 @@ export default function MappingWizard({ onNavigateToQueue, preloadedMapping, onC
   const [guidanceInput, setGuidanceInput] = useState('');
   const [guidanceLoading, setGuidanceLoading] = useState(false);
 
-  // Relation approvals (Issue 06)
-  const [relationApprovals, setRelationApprovals] = useState<Record<number, 'approved' | 'rejected' | 'pending'>>({});
+  // Relation statuses & comments (Issue 06)
+  const [relationStatuses, setRelationStatuses] = useState<Record<number, 'approved' | 'flagged' | 'pending'>>({});
+  const [relationComments, setRelationComments] = useState<Record<number, string>>({});
+  const [expandedRelation, setExpandedRelation] = useState<number | null>(null);
+  const [relationEdits, setRelationEdits] = useState<Record<number, { source_api_path?: string; target_entity?: string; cmsd_path?: string; target_field?: string }>>({});
+  const [globalRelationsCollapsed, setGlobalRelationsCollapsed] = useState(true);
 
   // Confirm mapping
   const [confirmLoading, setConfirmLoading] = useState(false);
@@ -173,6 +177,7 @@ export default function MappingWizard({ onNavigateToQueue, preloadedMapping, onC
   // Refs for preloaded data (avoids state batching issues)
   const preloadedPayloadsRef = useRef<FetchedPayload[]>([]);
   const preloadedEndpointsRef = useRef<EndpointRowData[]>([]);
+  const analyzeAbortRef = useRef<AbortController | null>(null);
 
   // Analyze progress
   const [analyzeSteps, setAnalyzeSteps] = useState<{ label: string; detail: string; status: 'pending' | 'running' | 'done' }[]>([]);
@@ -243,7 +248,10 @@ export default function MappingWizard({ onNavigateToQueue, preloadedMapping, onC
       // Clear refs when not editing — prevents stale data from previous edit sessions
       preloadedPayloadsRef.current = [];
       preloadedEndpointsRef.current = [];
-      setRelationApprovals({});
+      setRelationStatuses({});
+      setRelationComments({});
+      setExpandedRelation(null);
+      setRelationEdits({});
       return;
     }
     const m = preloadedMapping;
@@ -307,14 +315,14 @@ export default function MappingWizard({ onNavigateToQueue, preloadedMapping, onC
       setFieldStatuses(prev => ({ ...prev, ...newStatuses }));
     }
 
-    // Restore relation approvals from saved mapping (Issue 06)
+    // Restore relation statuses from saved mapping (Issue 06)
     const savedRelations = m.relations || [];
     if (savedRelations.length > 0) {
-      const relApprovals: Record<number, 'approved'> = {};
+      const relStatuses: Record<number, 'approved'> = {};
       savedRelations.forEach((_: any, idx: number) => {
-        relApprovals[idx] = 'approved';
+        relStatuses[idx] = 'approved';
       });
-      setRelationApprovals(relApprovals);
+      setRelationStatuses(relStatuses);
     }
   }, [preloadedMapping]);
 
@@ -446,7 +454,7 @@ export default function MappingWizard({ onNavigateToQueue, preloadedMapping, onC
 
     const pctByPhase: Record<string, number> = { payloads: 15, rag: 35, llm: 85 };
 
-    agentApi.analyzeMappingStream(
+    analyzeAbortRef.current = agentApi.analyzeMappingStream(
       { data_point_name: dataPointName || 'Untitled Data Point', cmsd_entity: cmsdEntity, approved_payloads: approvedPayloads },
       (step) => {
         const { phase, status: s, detail } = step;
@@ -571,12 +579,29 @@ export default function MappingWizard({ onNavigateToQueue, preloadedMapping, onC
     }
     const flaggedFields = Array.from(fieldCommentMap.entries()).map(([field, comment]) => ({ field, comment }));
 
+    // Collect flagged relations with their comments
+    const flaggedRelations: Array<{ index: number; relation: any; comment: string }> = [];
+    const allRels = mappingResult?.mapping?.relations || mappingResult?.relations || [];
+    for (const [idxStr, status] of Object.entries(relationStatuses)) {
+      if (status === 'flagged') {
+        const idx = parseInt(idxStr);
+        if (idx < allRels.length) {
+          flaggedRelations.push({
+            index: idx,
+            relation: allRels[idx],
+            comment: relationComments[idx] || '',
+          });
+        }
+      }
+    }
+
     const approvedPayloads = buildApprovedPayloads();
     setReanalyzeLoading(true);
     try {
       const result = await agentApi.reviewReanalyze({
         current_mapping: mappingResult?.mapping || {},
         flagged_fields: flaggedFields,
+        flagged_relations: flaggedRelations,
         data_point_name: dataPointName || 'Untitled Data Point',
         cmsd_entity: analyzedEntity || cmsdEntity,
         approved_payloads: approvedPayloads,
@@ -594,6 +619,15 @@ export default function MappingWizard({ onNavigateToQueue, preloadedMapping, onC
         return next;
       });
       setFieldComments({});
+      // Reset flagged relations to pending
+      setRelationStatuses(prev => {
+        const next = { ...prev };
+        for (const [key, status] of Object.entries(prev)) {
+          if (status === 'flagged') next[parseInt(key)] = 'pending';
+        }
+        return next;
+      });
+      setRelationComments({});
       setChangedFields(new Set(flaggedFields.map(f => f.field)));
     } catch (e: any) {
       // Keep flagged state on error so user can retry
@@ -680,12 +714,21 @@ export default function MappingWizard({ onNavigateToQueue, preloadedMapping, onC
       if (dataPointName) {
         mappingResult.mapping.data_point = dataPointName;
       }
-      // Merge approved relations into mapping (Issue 06)
+      // Merge relations — include approved/flagged, skip pending, apply edits
       const allRelations = mappingResult?.mapping?.relations || mappingResult?.relations || [];
-      const approvedRelations = allRelations.filter((_: any, idx: number) =>
-        (relationApprovals[idx] || 'pending') === 'approved'
-      );
-      mappingResult.mapping.relations = approvedRelations;
+      const savedRelations = allRelations
+        .map((rel: any, idx: number) => {
+          const edits = relationEdits[idx] || {};
+          const merged = { ...rel };
+          if (edits.source_api_path !== undefined) merged.match_key = { ...merged.match_key, source: { ...merged.match_key?.source, api_path: edits.source_api_path } };
+          if (edits.target_entity !== undefined) merged.target_entity = edits.target_entity;
+          if (edits.cmsd_path !== undefined) merged.cmsd_path = edits.cmsd_path;
+          if (edits.target_field !== undefined) merged.match_key = { ...merged.match_key, target: { ...merged.match_key?.target, field: edits.target_field } };
+          merged._status = relationStatuses[idx] || 'pending';
+          return merged;
+        })
+        .filter((rel: any) => rel._status !== 'pending');
+      mappingResult.mapping.relations = savedRelations;
 
       const id = `${(dataPointName || 'mapping').replace(/\s+/g, '-').toLowerCase()}-${Date.now()}`;
       const approvedPayloads = approvedPayloadEntries
@@ -931,7 +974,7 @@ export default function MappingWizard({ onNavigateToQueue, preloadedMapping, onC
 
       <div style={{ marginBottom: '24px' }}>
         <h2 style={{ color: '#f1f5f9', margin: '0 0 6px', fontSize: '22px', fontWeight: 700, letterSpacing: '-0.3px' }}>
-          Guided Mapping
+          Guided Builder
         </h2>
         <p style={{ color: '#64748b', margin: 0, fontSize: '13px', lineHeight: 1.5 }}>
           Map your API data to CMSD entities step by step. Select what to map, provide endpoints, and let the AI propose the field mapping.
@@ -1072,9 +1115,25 @@ export default function MappingWizard({ onNavigateToQueue, preloadedMapping, onC
                 background: '#1e293b', borderRadius: '12px', border: '1px solid #334155',
                 padding: '32px 40px', width: '440px',
               }}>
-                <p style={{ margin: '0 0 24px', color: '#f1f5f9', fontSize: '15px', fontWeight: 600 }}>
-                  Analyzing with RAG + LLM
-                </p>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
+                  <p style={{ margin: 0, color: '#f1f5f9', fontSize: '15px', fontWeight: 600 }}>
+                    Analyzing with RAG + LLM
+                  </p>
+                  <button
+                    onClick={() => {
+                      analyzeAbortRef.current?.abort();
+                      setPhase('fetch');
+                    }}
+                    style={{
+                      width: '28px', height: '28px', borderRadius: '6px', border: '1px solid #334155',
+                      background: 'transparent', color: '#94a3b8', fontSize: '14px', cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1,
+                      transition: 'all 0.15s',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = '#334155'; e.currentTarget.style.color = '#f1f5f9'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#94a3b8'; }}
+                  >✕</button>
+                </div>
 
                 {/* Steps */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '20px' }}>
@@ -1124,6 +1183,20 @@ export default function MappingWizard({ onNavigateToQueue, preloadedMapping, onC
                     100% { transform: translateX(430%); }
                   }
                 `}</style>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px' }}>
+                  <button
+                    onClick={() => {
+                      analyzeAbortRef.current?.abort();
+                      setPhase('fetch');
+                    }}
+                    style={{
+                      padding: '8px 20px', borderRadius: '6px',
+                      background: '#334155', border: 'none', color: '#94a3b8',
+                      cursor: 'pointer', fontSize: '13px',
+                    }}
+                  >Cancel</button>
+                </div>
               </div>
             </div>
           )}
@@ -1263,13 +1336,24 @@ export default function MappingWizard({ onNavigateToQueue, preloadedMapping, onC
               {(() => {
                 const relations = mappingResult?.mapping?.relations || mappingResult?.relations || [];
                 if (relations.length === 0) return null;
+
+                const STATUS_STYLE: Record<string, { icon: string; color: string; bg: string; label: string }> = {
+                  approved: { icon: '✓', color: '#86efac', bg: '#14532d', label: 'Approved' },
+                  flagged:  { icon: '⚑', color: '#fde68a', bg: '#78350f', label: 'Flagged' },
+                  pending:  { icon: '·', color: '#64748b', bg: 'transparent', label: 'Pending' },
+                };
+
                 return (
                   <div style={{
-                    marginBottom: '14px', padding: '14px 16px',
+                    marginBottom: '14px',
                     background: '#1e1b4b', borderRadius: '10px',
-                    border: '2px solid #6366f1',
+                    border: '2px solid #6366f1', overflow: 'hidden',
                   }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+                    {/* Header */}
+                    <div style={{
+                      padding: '12px 16px',
+                      display: 'flex', alignItems: 'center', gap: '8px',
+                    }}>
                       <span style={{ fontSize: '16px' }}>🔗</span>
                       <span style={{ fontSize: '13px', fontWeight: 700, color: '#c7d2fe' }}>
                         Entity Relations
@@ -1281,118 +1365,221 @@ export default function MappingWizard({ onNavigateToQueue, preloadedMapping, onC
                         {relations.length} detected
                       </span>
                     </div>
-                    <p style={{ fontSize: '11px', color: '#818cf8', margin: '0 0 10px' }}>
-                      These fields in your API payload reference OTHER CMSD entities. Accept them to wire entities together at generation time.
-                    </p>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      {relations.map((rel: any, idx: number) => {
-                        const approval = relationApprovals[idx] || 'pending';
-                        const targetExists = existingEntities.has(rel.target_entity);
-                        return (
-                          <div key={idx} style={{
-                            display: 'flex', alignItems: 'center', gap: '10px',
-                            padding: '10px 14px', borderRadius: '8px',
-                            background: approval === 'approved' ? '#064e3b' :
-                                        approval === 'rejected' ? '#1e293b' : '#0f172a',
-                            border: approval === 'approved' ? '1px solid #22c55e' :
-                                    approval === 'rejected' ? '1px solid #334155' :
-                                    '1px solid #475569',
-                            opacity: approval === 'rejected' ? 0.5 : 1,
-                          }}>
-                            {/* Source → Target path */}
-                            <div style={{ flex: 1 }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                                <code style={{
-                                  color: '#f1f5f9', background: '#1e293b', padding: '2px 6px',
-                                  borderRadius: '3px', fontSize: '11px', fontFamily: 'monospace',
-                                }}>
-                                  {rel.match_key?.source?.api_path || '(source field)'}
-                                </code>
-                                <span style={{ color: '#6366f1', fontSize: '16px' }}>→</span>
-                                <code style={{
-                                  color: '#c7d2fe', background: '#312e81', padding: '2px 6px',
-                                  borderRadius: '3px', fontSize: '11px', fontFamily: 'monospace',
-                                  fontWeight: 600,
-                                }}>
-                                  {rel.target_entity}
-                                </code>
-                                <span style={{ color: '#818cf8', fontSize: '10px', fontFamily: 'monospace' }}>
-                                  @ {rel.cmsd_path}
-                                </span>
+                    {/* ═══ Global Overview (collapsible, compact) ═══ */}
+                    <div style={{ borderTop: '1px solid #3730a3', borderBottom: '1px solid #3730a3' }}>
+                      <button
+                        onClick={() => setGlobalRelationsCollapsed(!globalRelationsCollapsed)}
+                        style={{
+                          width: '100%', padding: '8px 16px', border: 'none',
+                          background: '#1a1740', color: '#818cf8', cursor: 'pointer',
+                          fontSize: '11px', fontWeight: 600, textAlign: 'left',
+                          display: 'flex', alignItems: 'center', gap: '6px',
+                        }}
+                      >
+                        <span style={{
+                          transform: globalRelationsCollapsed ? 'none' : 'rotate(90deg)',
+                          transition: 'transform 0.15s', fontSize: '9px',
+                        }}>▶</span>
+                        Global Overview — {relations.length} relation{relations.length !== 1 ? 's' : ''} inferred across all instances
+                      </button>
+                      {!globalRelationsCollapsed && (
+                        <div style={{ padding: '8px 16px 10px', background: '#0f172a' }}>
+                          {relations.map((rel: any, idx: number) => {
+                            const edits = relationEdits[idx] || {};
+                            const src = edits.source_api_path ?? rel.match_key?.source?.api_path ?? '';
+                            const tgt = edits.target_entity ?? rel.target_entity ?? '';
+                            const cp = edits.cmsd_path ?? rel.cmsd_path ?? '';
+                            const tf = edits.target_field ?? rel.match_key?.target?.field ?? 'identifier';
+                            return (
+                              <div key={idx} style={{
+                                display: 'flex', alignItems: 'center', gap: '6px',
+                                padding: '4px 0', fontSize: '11px',
+                                borderBottom: idx < relations.length - 1 ? '1px solid #1e293b' : 'none',
+                              }}>
+                                <code style={{ color: '#94a3b8', fontFamily: 'monospace' }}>{src}</code>
+                                <span style={{ color: '#6366f1' }}>→</span>
+                                <code style={{ color: '#a5b4fc', fontFamily: 'monospace', fontWeight: 600 }}>{tgt}</code>
+                                <span style={{ color: '#64748b', fontSize: '10px', fontFamily: 'monospace' }}>@ {cp}</span>
+                                <span style={{ color: '#475569', fontSize: '10px', marginLeft: 'auto' }}>via {tf}</span>
                               </div>
-                              <div style={{ display: 'flex', gap: '12px', marginTop: '4px' }}>
-                                <span style={{ fontSize: '10px', color: '#64748b' }}>
-                                  Match: target.{rel.match_key?.target?.field || 'identifier'}
-                                </span>
-                                {rel.confidence && (
-                                  <span style={{
-                                    fontSize: '10px', padding: '1px 6px', borderRadius: '8px',
-                                    background: rel.confidence === 'high' ? '#14532d' : '#422006',
-                                    color: rel.confidence === 'high' ? '#86efac' : '#fde68a',
-                                  }}>
-                                    {rel.confidence} confidence
-                                  </span>
-                                )}
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* ═══ Per-Instance Relations (full controls) ═══ */}
+                    <div style={{ padding: '12px 16px' }}>
+                      <div style={{
+                        display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px',
+                      }}>
+                        <span style={{
+                          padding: '2px 8px', borderRadius: '6px',
+                          background: '#1e3a5f', color: '#93c5fd',
+                          fontSize: '10px', fontWeight: 600, fontFamily: 'monospace',
+                        }}>
+                          Instance {currentInstanceIndex + 1}/{instanceInfo?.count || 1}
+                        </span>
+                        <span style={{ fontSize: '10px', color: '#64748b' }}>
+                          {currentInstanceData ? String(getByPath(currentInstanceData, instanceInfo ? mappingResult?.mapping?.instances?.key_field || '' : '') || '—') : '—'}
+                        </span>
+                        <span style={{ fontSize: '10px', color: '#475569', marginLeft: 'auto' }}>
+                          Review each relation with the current instance's values
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        {relations.map((rel: any, idx: number) => {
+                          const status = relationStatuses[idx] || 'pending';
+                          const targetExists = existingEntities.has(rel.target_entity);
+                          const isExpanded = expandedRelation === idx;
+                          const edits = relationEdits[idx] || {};
+                          const sourcePath = edits.source_api_path ?? rel.match_key?.source?.api_path ?? '';
+                          const targetEntity = edits.target_entity ?? rel.target_entity ?? '';
+                          const cmsdPath = edits.cmsd_path ?? rel.cmsd_path ?? '';
+                          const targetField = edits.target_field ?? rel.match_key?.target?.field ?? 'identifier';
+                          const st = STATUS_STYLE[status];
+
+                          return (
+                            <div key={idx}>
+                              {/* Main row */}
+                              <div style={{
+                                display: 'flex', alignItems: 'center', gap: '8px',
+                                padding: '10px 12px', borderRadius: isExpanded ? '8px 8px 0 0' : '8px',
+                                background: status === 'approved' ? '#064e3b' :
+                                            status === 'flagged' ? '#1a1a0f' : '#0f172a',
+                                border: status === 'approved' ? '1px solid #22c55e' :
+                                        status === 'flagged' ? '1px solid #f59e0b' :
+                                        '1px solid #475569',
+                              }}>
+                                <span
+                                  onClick={() => setExpandedRelation(isExpanded ? null : idx)}
+                                  style={{
+                                    cursor: 'pointer', color: '#64748b', fontSize: '10px',
+                                    transform: isExpanded ? 'rotate(90deg)' : 'none',
+                                    transition: 'transform 0.15s', userSelect: 'none', flexShrink: 0,
+                                  }}
+                                >▶</span>
+                                <span title={st.label} style={{
+                                  color: st.color, fontSize: '13px', flexShrink: 0, width: '16px', textAlign: 'center',
+                                }}>{st.icon}</span>
+
+                                <div style={{ flex: 1 }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                    <code style={{
+                                      color: '#f1f5f9', background: '#1e293b', padding: '2px 6px',
+                                      borderRadius: '3px', fontSize: '11px', fontFamily: 'monospace',
+                                    }}>{sourcePath}</code>
+                                    {currentInstanceData && sourcePath && (
+                                      <span style={{
+                                        padding: '2px 6px', borderRadius: '3px',
+                                        background: '#1e3a5f', color: '#93c5fd',
+                                        fontSize: '11px', fontFamily: 'monospace', fontWeight: 600,
+                                      }}>
+                                        {String(getByPath(currentInstanceData, sourcePath) ?? '—')}
+                                      </span>
+                                    )}
+                                    <span style={{ color: '#6366f1', fontSize: '14px' }}>→</span>
+                                    <code style={{
+                                      color: '#c7d2fe', background: '#312e81', padding: '2px 6px',
+                                      borderRadius: '3px', fontSize: '11px', fontFamily: 'monospace', fontWeight: 600,
+                                    }}>{targetEntity}</code>
+                                    <span style={{ color: '#818cf8', fontSize: '10px', fontFamily: 'monospace' }}>@ {cmsdPath}</span>
+                                  </div>
+                                  <div style={{ marginTop: '3px', fontSize: '10px', color: '#64748b' }}>
+                                    Match: target.{targetField}
+                                    {rel.confidence && (
+                                      <span style={{
+                                        marginLeft: '8px', padding: '1px 6px', borderRadius: '8px',
+                                        background: rel.confidence === 'high' ? '#14532d' : '#422006',
+                                        color: rel.confidence === 'high' ? '#86efac' : '#fde68a',
+                                      }}>{rel.confidence}</span>
+                                    )}
+                                    {targetExists ? (
+                                      <span style={{ marginLeft: '8px', color: '#86efac' }}>✓ mapping exists</span>
+                                    ) : (
+                                      <span style={{ marginLeft: '8px', color: '#fde68a' }}>⚠ no mapping yet</span>
+                                    )}
+                                  </div>
+                                </div>
                               </div>
-                            </div>
 
-                            {/* Target availability */}
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              {targetExists ? (
-                                <span style={{
-                                  fontSize: '10px', color: '#86efac', background: '#14532d',
-                                  padding: '2px 8px', borderRadius: '8px', whiteSpace: 'nowrap',
+                              {/* Expanded review panel */}
+                              {isExpanded && (
+                                <div style={{
+                                  padding: '12px 16px', borderRadius: '0 0 8px 8px',
+                                  background: '#0f1a2e', border: '1px solid #334155', borderTop: 'none',
                                 }}>
-                                  ✓ mapping exists
-                                </span>
-                              ) : (
-                                <span style={{
-                                  fontSize: '10px', color: '#fde68a', background: '#422006',
-                                  padding: '2px 8px', borderRadius: '8px', whiteSpace: 'nowrap',
-                                }}>
-                                  ⚠ no mapping yet
-                                </span>
-                              )}
-
-                              {/* Accept / Reject buttons */}
-                              {approval !== 'approved' && (
-                                <button onClick={() => setRelationApprovals(prev => ({ ...prev, [idx]: 'approved' }))}
-                                  style={{
-                                    padding: '4px 10px', borderRadius: '4px', border: '1px solid #22c55e',
-                                    background: 'transparent', color: '#86efac', cursor: 'pointer',
-                                    fontSize: '11px', fontWeight: 600, whiteSpace: 'nowrap',
-                                  }}>
-                                  ✓ Accept
-                                </button>
-                              )}
-                              {approval !== 'rejected' && (
-                                <button onClick={() => setRelationApprovals(prev => ({ ...prev, [idx]: 'rejected' }))}
-                                  style={{
-                                    padding: '4px 10px', borderRadius: '4px', border: '1px solid #ef4444',
-                                    background: 'transparent', color: '#fca5a5', cursor: 'pointer',
-                                    fontSize: '11px', fontWeight: 500, whiteSpace: 'nowrap',
-                                  }}>
-                                  ✕
-                                </button>
-                              )}
-                              {approval === 'approved' && (
-                                <span style={{ color: '#86efac', fontSize: '14px' }}>✓</span>
-                              )}
-                              {approval === 'rejected' && (
-                                <button onClick={() => setRelationApprovals(prev => ({ ...prev, [idx]: 'pending' }))}
-                                  style={{
-                                    padding: '4px 8px', borderRadius: '4px', border: '1px solid #475569',
-                                    background: 'transparent', color: '#94a3b8', cursor: 'pointer',
-                                    fontSize: '11px',
-                                  }}>
-                                  Undo
-                                </button>
+                                  <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+                                    {(['approved', 'pending', 'flagged'] as const).map(s => {
+                                      const st2 = STATUS_STYLE[s];
+                                      const active = status === s;
+                                      return (
+                                        <button key={s}
+                                          onClick={() => setRelationStatuses(prev => ({ ...prev, [idx]: s }))}
+                                          style={{
+                                            padding: '5px 12px', borderRadius: '5px',
+                                            border: active ? `2px solid ${st2.color}` : '1px solid #334155',
+                                            background: active ? st2.bg : 'transparent',
+                                            color: active ? st2.color : '#64748b',
+                                            cursor: 'pointer', fontSize: '12px', fontWeight: active ? 700 : 500,
+                                            display: 'flex', alignItems: 'center', gap: '5px',
+                                          }}>
+                                          <span style={{ fontSize: '13px' }}>{st2.icon}</span> {st2.label}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '10px' }}>
+                                    <div>
+                                      <label style={{ color: '#64748b', fontSize: '10px', display: 'block', marginBottom: '2px' }}>Source API path</label>
+                                      <input value={sourcePath}
+                                        onChange={e => setRelationEdits(prev => ({ ...prev, [idx]: { ...prev[idx], source_api_path: e.target.value } }))}
+                                        style={{ width: '100%', padding: '5px 8px', borderRadius: '4px', background: '#1e293b', border: '1px solid #334155', color: '#e2e8f0', fontSize: '11px', fontFamily: 'monospace', boxSizing: 'border-box' }} />
+                                    </div>
+                                    <div>
+                                      <label style={{ color: '#64748b', fontSize: '10px', display: 'block', marginBottom: '2px' }}>Target entity</label>
+                                      <input value={targetEntity}
+                                        onChange={e => setRelationEdits(prev => ({ ...prev, [idx]: { ...prev[idx], target_entity: e.target.value } }))}
+                                        style={{ width: '100%', padding: '5px 8px', borderRadius: '4px', background: '#1e293b', border: '1px solid #334155', color: '#e2e8f0', fontSize: '11px', fontFamily: 'monospace', boxSizing: 'border-box' }} />
+                                    </div>
+                                    <div>
+                                      <label style={{ color: '#64748b', fontSize: '10px', display: 'block', marginBottom: '2px' }}>CMSD path</label>
+                                      <input value={cmsdPath}
+                                        onChange={e => setRelationEdits(prev => ({ ...prev, [idx]: { ...prev[idx], cmsd_path: e.target.value } }))}
+                                        style={{ width: '100%', padding: '5px 8px', borderRadius: '4px', background: '#1e293b', border: '1px solid #334155', color: '#e2e8f0', fontSize: '11px', fontFamily: 'monospace', boxSizing: 'border-box' }} />
+                                    </div>
+                                    <div>
+                                      <label style={{ color: '#64748b', fontSize: '10px', display: 'block', marginBottom: '2px' }}>Target field</label>
+                                      <input value={targetField}
+                                        onChange={e => setRelationEdits(prev => ({ ...prev, [idx]: { ...prev[idx], target_field: e.target.value } }))}
+                                        style={{ width: '100%', padding: '5px 8px', borderRadius: '4px', background: '#1e293b', border: '1px solid #334155', color: '#e2e8f0', fontSize: '11px', fontFamily: 'monospace', boxSizing: 'border-box' }} />
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <label style={{ color: '#64748b', fontSize: '10px', display: 'block', marginBottom: '2px' }}>
+                                      Comment {status === 'flagged' ? '(required for reanalysis)' : '(optional)'}
+                                    </label>
+                                    <textarea
+                                      value={relationComments[idx] || ''}
+                                      onChange={e => setRelationComments(prev => ({ ...prev, [idx]: e.target.value }))}
+                                      placeholder="e.g. This target entity should be PartType, not Part"
+                                      rows={2}
+                                      style={{ width: '100%', padding: '6px 8px', borderRadius: '4px', background: '#1e293b', border: '1px solid #334155', color: '#e2e8f0', fontSize: '12px', fontFamily: 'monospace', boxSizing: 'border-box', resize: 'vertical' }} />
+                                    <button onClick={() => {
+                                      const btn = document.activeElement as HTMLButtonElement;
+                                      if (btn) { const orig = btn.textContent; btn.textContent = '✓ Saved'; btn.style.color = '#86efac'; setTimeout(() => { btn.textContent = orig; btn.style.color = ''; }, 1200); }
+                                    }}
+                                      style={{ marginTop: '4px', padding: '4px 12px', borderRadius: '4px', border: '1px solid #334155', background: '#1e293b', color: '#94a3b8', cursor: 'pointer', fontSize: '11px' }}
+                                    >Save Comment</button>
+                                  </div>
+                                </div>
                               )}
                             </div>
-                          </div>
-                        );
-                      })}
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
                 );
@@ -1539,29 +1726,38 @@ export default function MappingWizard({ onNavigateToQueue, preloadedMapping, onC
                 typeValidation={typeValidation}
               />
 
-              {/* Reanalyze Flagged button */}
-              {Object.values(fieldStatuses).some(s => s === 'flagged') && (
-                <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <button onClick={handleReviewReanalyze} disabled={reanalyzeLoading}
-                    style={{
-                      padding: '10px 24px', borderRadius: '6px', border: 'none',
-                      background: reanalyzeLoading ? '#334155' : '#f59e0b',
-                      color: reanalyzeLoading ? '#64748b' : '#0f172a',
-                      cursor: reanalyzeLoading ? 'not-allowed' : 'pointer',
-                      fontSize: '13px', fontWeight: 700,
-                      display: 'flex', alignItems: 'center', gap: '8px',
-                    }}>
-                    {reanalyzeLoading ? (
-                      <><span style={{ display: 'inline-block', width: '12px', height: '12px', border: '2px solid #64748b', borderTopColor: '#93c5fd', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} /> Reanalyzing...</>
-                    ) : (
-                      <>⚡ Reanalyze {Object.values(fieldStatuses).filter(s => s === 'flagged').length} Flagged Field{Object.values(fieldStatuses).filter(s => s === 'flagged').length !== 1 ? 's' : ''}</>
-                    )}
-                  </button>
-                  <span style={{ fontSize: '11px', color: '#64748b' }}>
-                    Only flagged fields will be sent to the LLM with your comments. Approved fields will stay unchanged.
-                  </span>
-                </div>
-              )}
+              {/* Reanalyze Flagged button — activates for both field and relation flags */}
+              {(() => {
+                const flaggedFieldCount = Object.values(fieldStatuses).filter(s => s === 'flagged').length;
+                const flaggedRelCount = Object.values(relationStatuses).filter(s => s === 'flagged').length;
+                const totalFlagged = flaggedFieldCount + flaggedRelCount;
+                if (totalFlagged === 0) return null;
+                return (
+                  <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <button onClick={handleReviewReanalyze} disabled={reanalyzeLoading}
+                      style={{
+                        padding: '10px 24px', borderRadius: '6px', border: 'none',
+                        background: reanalyzeLoading ? '#334155' : '#f59e0b',
+                        color: reanalyzeLoading ? '#64748b' : '#0f172a',
+                        cursor: reanalyzeLoading ? 'not-allowed' : 'pointer',
+                        fontSize: '13px', fontWeight: 700,
+                        display: 'flex', alignItems: 'center', gap: '8px',
+                      }}>
+                      {reanalyzeLoading ? (
+                        <><span style={{ display: 'inline-block', width: '12px', height: '12px', border: '2px solid #64748b', borderTopColor: '#93c5fd', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} /> Reanalyzing...</>
+                      ) : (
+                        <>⚡ Reanalyze {totalFlagged} Flagged Item{totalFlagged !== 1 ? 's' : ''}
+                          {flaggedFieldCount > 0 && ` (${flaggedFieldCount} field${flaggedFieldCount !== 1 ? 's' : ''})`}
+                          {flaggedRelCount > 0 && ` (${flaggedRelCount} relation${flaggedRelCount !== 1 ? 's' : ''})`}
+                        </>
+                      )}
+                    </button>
+                    <span style={{ fontSize: '11px', color: '#64748b' }}>
+                      Flagged fields and relations with comments will be sent to the LLM. Approved items stay unchanged.
+                    </span>
+                  </div>
+                );
+              })()}
 
               {/* ── Smart Reanalyze with Guidance ── */}
               {mappedFieldCount > 0 && (

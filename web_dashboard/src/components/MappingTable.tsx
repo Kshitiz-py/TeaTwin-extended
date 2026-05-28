@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import TransformSelector, { TransformConfig } from './TransformSelector';
 import { agentApi } from '../services/agentApi';
 
@@ -61,7 +61,45 @@ export default function MappingTable({
   reviewMode, fieldStatuses, fieldComments, onStatusChange, onCommentChange,
   typeValidation,
 }: Props) {
-  const fields = mapping?.mapping ?? {};
+  const rawFields = mapping?.mapping ?? {};
+  const [catalogFields, setCatalogFields] = useState<string[]>([]);
+
+  // Fetch catalog to build the full field table framework
+  useEffect(() => {
+    if (!cmsdEntity) return;
+    fetch('/api/agent/v1/cmsd-catalog')
+      .then(r => r.json())
+      .then(data => {
+        const entity = data?.entities?.[cmsdEntity];
+        if (entity?.fields) {
+          setCatalogFields(entity.fields.map((f: any) => f.name));
+        }
+      })
+      .catch(() => {});
+  }, [cmsdEntity]);
+
+  // Merge: all catalog fields as the framework, LLM data filled in where present
+  const fields = React.useMemo(() => {
+    if (catalogFields.length === 0) return rawFields;
+    const merged: Record<string, any> = {};
+    for (const name of catalogFields) {
+      merged[name] = rawFields[name] || {
+        api_path: '',
+        type_conversion: 'none',
+        raw_value: '',
+        converted_value: '',
+        sample_value: '',
+        confidence: '',
+        source_endpoint: '',
+      };
+    }
+    // Also include any extra fields from LLM that are not in catalog (e.g. relation source fields)
+    for (const key of Object.keys(rawFields)) {
+      if (!merged[key]) merged[key] = rawFields[key];
+    }
+    return merged;
+  }, [catalogFields, rawFields]);
+
   const fieldNames = Object.keys(fields);
   const [editingApiPath, setEditingApiPath] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
@@ -246,9 +284,16 @@ export default function MappingTable({
                   )}
 
                   <td style={tdStyle}>
-                    <code style={{ color: '#c4b5fd', background: '#1e293b', padding: '1px 4px', borderRadius: '3px', fontSize: '10px', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                    <code style={{
+                      color: f._is_relation_source ? '#fde68a' : '#c4b5fd',
+                      background: f._is_relation_source ? '#422006' : '#1e293b',
+                      padding: '1px 4px', borderRadius: '3px', fontSize: '10px', fontWeight: 600, whiteSpace: 'nowrap',
+                    }}>
                       {fieldName}
                     </code>
+                    {f._is_relation_source && (
+                      <span style={{ marginLeft: '4px', fontSize: '9px', color: '#f59e0b' }} title="This field is also a cross-entity relation source">🔗</span>
+                    )}
                   </td>
 
                   {/* API Path — click to edit if expand not active */}

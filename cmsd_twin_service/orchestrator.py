@@ -192,7 +192,7 @@ class CMSDOrchestrator:
                 preflight_result = self.run_preflight(mapping_ids)
 
             return {
-                "success": len(report.get("fetch_errors", [])) == 0,
+                "success": len(report.get("fetch_errors", [])) == 0 and len(report.get("relation_errors", [])) == 0,
                 "refreshed_at": self._last_refreshed.isoformat(),
                 "phases": {
                     "preflight": preflight_result,
@@ -206,6 +206,7 @@ class CMSDOrchestrator:
                 },
                 "fetch_errors": report.get("fetch_errors", []),
                 "field_warnings": report.get("field_warnings", []),
+                "relation_errors": report.get("relation_errors", []),
                 "changes_detected": len(changes),
                 "elapsed_ms": elapsed_ms,
             }
@@ -254,6 +255,18 @@ class CMSDOrchestrator:
                 target_id = relation.get("target_mapping_id", "")
                 target_entity = relation.get("target_entity", "")
                 cmsd_path = relation.get("cmsd_path", "")
+                source_api_path = relation.get("match_key", {}).get("source", {}).get("api_path", "")
+
+                # Extract referenced identifier values from source mapping's raw payload
+                source_values: list[str] = []
+                if source_api_path:
+                    raw_payload = mapping.get("endpoints", [{}])[0].get("raw_payload", [])
+                    for record in raw_payload:
+                        val = record.get(source_api_path)
+                        if val is not None:
+                            source_values.append(str(val))
+                    source_values = sorted(set(source_values))
+
                 if target_id and target_id not in self._registry._mappings:
                     relation_missing.append({
                         "for_mapping": mid,
@@ -261,10 +274,10 @@ class CMSDOrchestrator:
                         "relation_path": cmsd_path,
                         "target_mapping_id": target_id,
                         "target_entity": target_entity,
+                        "source_values": source_values,
                         "resolved": False,
                     })
                 elif not target_id and target_entity:
-                    # Check if any mapping produces this entity type
                     found = any(
                         m.get("cmsd_entity") == target_entity
                         for m in self._registry._mappings.values()
@@ -276,6 +289,7 @@ class CMSDOrchestrator:
                             "relation_path": cmsd_path,
                             "target_mapping_id": "(any)",
                             "target_entity": target_entity,
+                            "source_values": source_values,
                             "resolved": False,
                         })
 
@@ -296,7 +310,9 @@ class CMSDOrchestrator:
                     })
 
         return {
-            "passed": len(missing_deps) == 0 and len(unapproved) == 0 and len(relation_missing) == 0,
+            # Relation target existence is NOT a preflight blocker — the build phase
+            # catches it with specific instance identifiers, enabling guided manual creation.
+            "passed": len(missing_deps) == 0 and len(unapproved) == 0,
             "checks": {
                 "dependencies": {
                     "passed": len(missing_deps) == 0,
@@ -304,7 +320,7 @@ class CMSDOrchestrator:
                     "missing": missing_deps,
                 },
                 "relations": {
-                    "passed": len(relation_missing) == 0,
+                    "passed": True,  # informational; build phase resolves with instance-level detail
                     "missing_targets": relation_missing,
                 },
                 "field_coverage": {

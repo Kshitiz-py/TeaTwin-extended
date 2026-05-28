@@ -8,6 +8,7 @@ interface GenerateModalProps {
   onComplete: (report: RefreshReport) => void;
   onViewDashboard?: () => void;
   preflightResult?: PreflightResult | null;
+  onCreateManual?: (entityType: string, identifiers: string[]) => void;
 }
 
 type PhaseStatus = 'pending' | 'running' | 'done' | 'error';
@@ -19,7 +20,7 @@ interface Phase {
   detail?: string;
 }
 
-export default function GenerateModal({ open, mappingIds, onClose, onComplete, onViewDashboard, preflightResult }: GenerateModalProps) {
+export default function GenerateModal({ open, mappingIds, onClose, onComplete, onViewDashboard, preflightResult, onCreateManual }: GenerateModalProps) {
   const [phases, setPhases] = useState<Phase[]>([
     { key: 'preflight', label: 'Pre-flight check', status: 'pending' },
     { key: 'fetch', label: 'Fetching APIs', status: 'pending' },
@@ -115,7 +116,7 @@ export default function GenerateModal({ open, mappingIds, onClose, onComplete, o
 
   if (!open) return null;
 
-  const hasErrors = report?.fetch_errors && report.fetch_errors.length > 0;
+  const hasErrors = (report?.fetch_errors && report.fetch_errors.length > 0) || (report?.relation_errors && report.relation_errors.length > 0);
   const allFailed = hasErrors && (!report?.phases?.generation || Object.keys(report.phases.generation).length === 0);
 
   return (
@@ -128,9 +129,20 @@ export default function GenerateModal({ open, mappingIds, onClose, onComplete, o
         background: '#1e293b', borderRadius: '12px', border: '1px solid #334155',
         padding: '28px', width: '520px', maxHeight: '80vh', overflow: 'auto',
       }}>
-        <h3 style={{ color: '#f1f5f9', margin: '0 0 20px', fontSize: '18px' }}>
-          Generate & Apply
-        </h3>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+          <h3 style={{ color: '#f1f5f9', margin: 0, fontSize: '18px' }}>Generate & Apply</h3>
+          <button
+            onClick={onClose}
+            style={{
+              width: '28px', height: '28px', borderRadius: '6px', border: '1px solid #334155',
+              background: 'transparent', color: '#94a3b8', fontSize: '14px', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1,
+              transition: 'all 0.15s',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = '#334155'; e.currentTarget.style.color = '#f1f5f9'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#94a3b8'; }}
+          >✕</button>
+        </div>
 
         {/* Phases */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px' }}>
@@ -277,6 +289,67 @@ export default function GenerateModal({ open, mappingIds, onClose, onComplete, o
                 ))}
               </div>
             )}
+            {report.relation_errors && report.relation_errors.length > 0 && (() => {
+              // Extract {entityType: [identifiers]} from relation errors
+              const missingByIdentifier: Record<string, Set<string>> = {};
+              for (const err of report.relation_errors) {
+                const field = err.field || '';
+                const match = field.match(/relation→(\w+)/);
+                if (!match) continue;
+                const target = match[1];
+                if (!missingByIdentifier[target]) missingByIdentifier[target] = new Set();
+                // Extract identifier value from error message like "instance '5' not found..."
+                const idMatch = err.error?.match(/instance '([^']+)'/);
+                if (idMatch) missingByIdentifier[target].add(idMatch[1]);
+              }
+              return (
+                <div style={{ marginTop: '8px' }}>
+                  <div style={{ color: '#ef4444', fontSize: '11px', fontWeight: 600, marginBottom: '4px' }}>
+                    Relation Errors ({report.relation_errors.length}):
+                  </div>
+                  {report.relation_errors.slice(0, 8).map((err: any, i: number) => (
+                    <div key={i} style={{ color: '#ef4444', fontSize: '11px', marginLeft: '8px', marginBottom: '2px' }}>
+                      {err.entity_type}{err.instance_key ? `/${err.instance_key}` : ''}: <strong>{err.field}</strong> — {err.error}
+                    </div>
+                  ))}
+                  {report.relation_errors.length > 8 && (
+                    <div style={{ color: '#64748b', fontSize: '11px', marginLeft: '8px' }}>
+                      ...and {report.relation_errors.length - 8} more
+                    </div>
+                  )}
+                  {Object.keys(missingByIdentifier).length > 0 && (
+                    <div style={{
+                      marginTop: '8px', padding: '10px 14px', borderRadius: '8px',
+                      background: '#422006', border: '1px solid #78350f',
+                    }}>
+                      <div style={{ color: '#fde68a', fontSize: '11px', marginBottom: '8px' }}>
+                        The following referenced entities are missing. Create them manually to resolve.
+                      </div>
+                      {Object.entries(missingByIdentifier).map(([entity, ids]) => (
+                        <button
+                          key={entity}
+                          onClick={() => {
+                            onClose();
+                            onCreateManual?.(entity, [...ids]);
+                          }}
+                          style={{
+                            display: 'block', width: '100%', marginBottom: '4px',
+                            padding: '7px 12px', borderRadius: '6px', border: '1px solid #b45309',
+                            background: '#1e293b', color: '#fde68a', fontSize: '11px',
+                            cursor: 'pointer', textAlign: 'left', fontFamily: 'monospace',
+                            transition: 'background 0.15s',
+                          }}
+                          onMouseEnter={e => (e.currentTarget.style.background = '#1a1f2e')}
+                          onMouseLeave={e => (e.currentTarget.style.background = '#1e293b')}
+                        >
+                          Create manual <strong>{entity}</strong> — missing: {ids.join(', ')}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
             {report.field_warnings && report.field_warnings.length > 0 && (
               <div style={{ marginTop: '8px' }}>
                 <div style={{ color: '#fbbf24', fontSize: '11px', fontWeight: 600, marginBottom: '4px' }}>

@@ -79,7 +79,49 @@ async def get_resources():
             "current_status": r.current_status.value if r.current_status and hasattr(r.current_status, "value") else str(r.current_status) if r.current_status else None,
             "availability": float(r.availability) if r.availability else None,
             "capacity": r.capacity,
+            "resource_class": r.resource_class.resource_class_identifier if r.resource_class else None,
             "_connection": data.get("_connection"),
+        })
+    return result
+
+
+@router.get("/digital-twin/resource-classes")
+async def get_resource_classes():
+    """Return all resource classes."""
+    if not orchestrator or not orchestrator.current_document:
+        raise HTTPException(503, "Digital twin not yet available")
+    doc = orchestrator.current_document
+    result = []
+    for rc in doc.resource_classes:
+        data = _serialize_entity(rc)
+        result.append({
+            "identifier": rc.identifier,
+            "name": rc.name,
+            "description": rc.description,
+            "resource_type": rc.resource_type.value if hasattr(rc.resource_type, "value") else str(rc.resource_type),
+            "hourly_rate": {"value": float(rc.hourly_rate.value), "unit": rc.hourly_rate.unit} if rc.hourly_rate else None,
+            "size": {"width": rc.size.width, "depth": rc.size.depth, "height": rc.size.height, "unit": rc.size.unit} if rc.size else None,
+            "_connection": data.get("_connection"),
+        })
+    return result
+
+
+@router.get("/digital-twin/connections")
+async def get_connections():
+    """Return all connections with from/to resource identifiers for topology edges."""
+    if not orchestrator or not orchestrator.current_document:
+        raise HTTPException(503, "Digital twin not yet available")
+    doc = orchestrator.current_document
+    result = []
+    for c in doc.connections:
+        from_id = c.from_resource.resource_identifier if c.from_resource else None
+        to_id = c.to_resource.resource_identifier if c.to_resource else None
+        result.append({
+            "identifier": c.identifier,
+            "name": c.name,
+            "from_resource": from_id,
+            "to_resource": to_id,
+            "connection_type": c.connection_type.value if hasattr(c.connection_type, "value") else str(c.connection_type) if c.connection_type else None,
         })
     return result
 
@@ -233,7 +275,6 @@ async def validate_preflight(body: dict):
 
         preflight["passed"] = (
             preflight["checks"]["dependencies"]["passed"] and
-            preflight["checks"]["relations"]["passed"] and
             preflight["checks"]["field_coverage"]["passed"] and
             preflight["checks"]["api_reachability"]["passed"]
         )

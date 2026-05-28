@@ -282,7 +282,7 @@ export const agentApi = {
     return res.json();
   },
   // Streaming version — returns an abortable fetch for SSE consumption
-  analyzeMappingStream(body: any, onStep: (step: any) => void, onResult: (result: any) => void, onError: (msg: string) => void) {
+  analyzeMappingStream(body: any, onStep: (step: any) => void, onResult: (result: any) => void, onError: (msg: string) => void): AbortController {
     const controller = new AbortController();
     let resultReceived = false;
 
@@ -515,6 +515,16 @@ export const agentApi = {
       body: JSON.stringify({ cmsd_entity: cmsdEntity, mapping: fieldMap }),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  },
+
+  async createManualMapping(entityType: string, entries: Array<Record<string, any>>, dataPoint?: string) {
+    const res = await fetch(`${BASE}/mappings/manual`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entity_type: entityType, entries, data_point: dataPoint }),
+    });
+    if (!res.ok) throw new Error(`Manual mapping failed: ${res.status}`);
     return res.json();
   },
 };

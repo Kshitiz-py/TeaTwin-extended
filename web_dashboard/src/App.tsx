@@ -2,10 +2,12 @@ import { useState, useEffect } from 'react';
 import { useWebSocket } from './hooks/useWebSocket';
 import FactoryTopology from './components/FactoryTopology';
 import ResourcePanel from './components/ResourcePanel';
+import ResourceClassPanel from './components/ResourceClassPanel';
 import OrderTracker from './components/OrderTracker';
 import ChangeLog from './components/ChangeLog';
 import SetupWizard from './components/SetupWizard';
 import ReviewQueue from './components/ReviewQueue';
+import ManualBuilder from './components/ManualBuilder';
 import AgentConnect from './components/AgentConnect';
 import { api } from './services/api';
 import { agentApi, AgentStatus } from './services/agentApi';
@@ -28,7 +30,7 @@ interface Summary {
 
 export default function App() {
   const [summary, setSummary] = useState<Summary | null>(null);
-  const [activeTab, setActiveTab] = useState<'topology' | 'resources' | 'orders' | 'changes' | 'mappings'>('topology');
+  const [activeTab, setActiveTab] = useState<'topology' | 'resources' | 'classes' | 'orders' | 'changes' | 'mappings' | 'manuals'>('topology');
   const [activeMode, setActiveMode] = useState<AppMode>('dashboard');
   const [agentStatus, setAgentStatus] = useState<AgentStatus | null>(null);
   const [sourceCount, setSourceCount] = useState(0);
@@ -199,9 +201,11 @@ export default function App() {
   const tabs = [
     { key: 'topology' as const, label: 'Factory Topology' },
     { key: 'resources' as const, label: 'Resources' },
+    { key: 'classes' as const, label: 'Resource Classes' },
     { key: 'orders' as const, label: 'Orders' },
     { key: 'changes' as const, label: `Change Log (${events.length})` },
     { key: 'mappings' as const, label: 'Mapping Registry' },
+    { key: 'manuals' as const, label: 'Manual Builder' },
   ];
 
   const agentOnline = agentStatus?.connected ?? false;
@@ -435,19 +439,28 @@ export default function App() {
           gap: '12px', padding: '16px 24px',
         }}>
           {[
-            { label: 'Resources', value: summary.resources },
-            { label: 'Resource Classes', value: summary.resource_classes },
-            { label: 'Part Types', value: summary.part_types },
-            { label: 'Orders', value: summary.orders },
-            { label: 'Jobs', value: summary.jobs },
-            { label: 'Connections', value: summary.connections },
+            { label: 'Resources', value: summary.resources, dot: '#3b82f6', tab: 'resources' as const },
+            { label: 'Resource Classes', value: summary.resource_classes, dot: '#8b5cf6', tab: 'resources' as const },
+            { label: 'Part Types', value: summary.part_types, dot: '#f59e0b', tab: 'resources' as const },
+            { label: 'Orders', value: summary.orders, dot: '#22c55e', tab: 'orders' as const },
+            { label: 'Jobs', value: summary.jobs, dot: '#ef4444', tab: 'orders' as const },
+            { label: 'Connections', value: summary.connections, dot: '#06b6d4', tab: 'topology' as const },
           ].map(kpi => (
-            <div key={kpi.label} style={{
-              background: '#1e293b', borderRadius: '8px', padding: '14px',
-              border: '1px solid #334155',
-            }}>
-              <p style={{ fontSize: '11px', color: '#94a3b8', textTransform: 'uppercase' }}>{kpi.label}</p>
-              <p style={{ fontSize: '28px', fontWeight: 700, color: '#f1f5f9' }}>{kpi.value}</p>
+            <div key={kpi.label}
+              onClick={() => setActiveTab(kpi.tab)}
+              style={{
+                background: '#1e293b', borderRadius: '8px', padding: '14px',
+                border: '1px solid #334155', cursor: 'pointer',
+                transition: 'border-color 0.15s, background 0.15s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = kpi.dot; e.currentTarget.style.background = '#1a2233'; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = '#334155'; e.currentTarget.style.background = '#1e293b'; }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+                <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: kpi.dot, flexShrink: 0 }} />
+                <span style={{ fontSize: '10px', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600, letterSpacing: '0.5px' }}>{kpi.label}</span>
+              </div>
+              <p style={{ fontSize: '28px', fontWeight: 700, color: '#f1f5f9', margin: 0 }}>{kpi.value}</p>
             </div>
           ))}
         </div>
@@ -557,6 +570,7 @@ export default function App() {
       <div style={{ padding: '16px 24px' }}>
         {activeTab === 'topology' && <FactoryTopology events={events} />}
         {activeTab === 'resources' && <ResourcePanel />}
+        {activeTab === 'classes' && <ResourceClassPanel />}
         {activeTab === 'orders' && <OrderTracker />}
         {activeTab === 'changes' && <ChangeLog events={events} />}
         {activeTab === 'mappings' && (
@@ -565,6 +579,7 @@ export default function App() {
             onNavigateToExplorer={() => { setInitialWizardStep(2); setActiveMode('wizard'); }}
           />
         )}
+        {activeTab === 'manuals' && <ManualBuilder />}
       </div>
     </div>
   );
