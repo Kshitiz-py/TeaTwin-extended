@@ -22,7 +22,7 @@ class ChangeEvent:
         self.timestamp = datetime.now(timezone.utc).isoformat()
 
     def to_dict(self) -> dict:
-        return {
+        result = {
             "entity_type": self.entity_type,
             "entity_identifier": self.entity_identifier,
             "entity_name": self.entity_name,
@@ -32,6 +32,10 @@ class ChangeEvent:
             "event_type": self.event_type,
             "timestamp": self.timestamp,
         }
+        # Include _connection if the entity has one (mapping-driven entities)
+        if hasattr(self, '_connection'):
+            result["_connection"] = self._connection
+        return result
 
 
 class ChangeDetector:
@@ -67,9 +71,9 @@ class ChangeDetector:
 
         # Detect updates and creations
         for ident, new_item in new_by_id.items():
+            conn = getattr(new_item, '_connection', None)
             if ident not in old_by_id:
-                # Created
-                events.append(ChangeEvent(
+                ev = ChangeEvent(
                     entity_type=entity_type,
                     entity_identifier=ident,
                     entity_name=getattr(new_item, "name", ident),
@@ -77,14 +81,17 @@ class ChangeDetector:
                     old_value=None,
                     new_value="created",
                     event_type="created",
-                ))
+                )
+                if conn:
+                    ev._connection = conn
+                events.append(ev)
             else:
                 old_item = old_by_id[ident]
                 for field in tracked:
                     old_val = getattr(old_item, field, None)
                     new_val = getattr(new_item, field, None)
                     if _serialize(old_val) != _serialize(new_val):
-                        events.append(ChangeEvent(
+                        ev = ChangeEvent(
                             entity_type=entity_type,
                             entity_identifier=ident,
                             entity_name=getattr(new_item, "name", ident),
@@ -92,13 +99,16 @@ class ChangeDetector:
                             old_value=old_val,
                             new_value=new_val,
                             event_type="updated",
-                        ))
+                        )
+                        if conn:
+                            ev._connection = conn
+                        events.append(ev)
 
         # Detect deletions
         for ident in old_by_id:
             if ident not in new_by_id:
                 old_item = old_by_id[ident]
-                events.append(ChangeEvent(
+                ev = ChangeEvent(
                     entity_type=entity_type,
                     entity_identifier=ident,
                     entity_name=getattr(old_item, "name", ident),
@@ -106,7 +116,11 @@ class ChangeDetector:
                     old_value="existed",
                     new_value=None,
                     event_type="deleted",
-                ))
+                )
+                conn = getattr(old_item, '_connection', None)
+                if conn:
+                    ev._connection = conn
+                events.append(ev)
 
         return events
 

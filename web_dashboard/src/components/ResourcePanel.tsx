@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { api } from '../services/api';
+import { api, ConnectionMetadata } from '../services/api';
+import ConnectionIndicator from './ConnectionIndicator';
 
 interface Resource {
   identifier: string;
@@ -8,6 +9,7 @@ interface Resource {
   current_status: string | null;
   availability: number | null;
   capacity: number | null;
+  _connection?: ConnectionMetadata;
 }
 
 const statusBadgeStyle = (s: string | null): React.CSSProperties => {
@@ -83,8 +85,11 @@ export default function ResourcePanel() {
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
               <span style={{ fontSize: '20px' }}>{typeIcon(r.resource_type)}</span>
               <div>
-                <p style={{ fontSize: '14px', fontWeight: 600, color: '#f1f5f9' }}>{r.name}</p>
-                <p style={{ fontSize: '11px', color: '#64748b' }}>{r.identifier} · {r.resource_type}</p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <p style={{ fontSize: '14px', fontWeight: 600, color: '#f1f5f9', margin: 0 }}>{r.name}</p>
+                  <ConnectionIndicator entity={r} />
+                </div>
+                <p style={{ fontSize: '11px', color: '#64748b', margin: '2px 0 0' }}>{r.identifier} · {r.resource_type}</p>
               </div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>

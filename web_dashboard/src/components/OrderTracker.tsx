@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
-import { api } from '../services/api';
+import { api, ConnectionMetadata } from '../services/api';
+import ConnectionIndicator from './ConnectionIndicator';
 
 interface Order {
   identifier: string;
   status: string;
   due_date: string | null;
   line_count: number;
+  _connection?: ConnectionMetadata;
 }
 
 const statusColor = (s: string): string => {
@@ -41,8 +43,11 @@ export default function OrderTracker() {
             border: '1px solid #334155',
           }}>
             <div style={{ flex: 1 }}>
-              <p style={{ fontSize: '14px', fontWeight: 600, color: '#f1f5f9' }}>{o.identifier}</p>
-              <p style={{ fontSize: '11px', color: '#64748b' }}>Due: {o.due_date ? new Date(o.due_date).toLocaleDateString() : 'N/A'} · {o.line_count} lines</p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <p style={{ fontSize: '14px', fontWeight: 600, color: '#f1f5f9', margin: 0 }}>{o.identifier}</p>
+                <ConnectionIndicator entity={o} />
+              </div>
+              <p style={{ fontSize: '11px', color: '#64748b', margin: '2px 0 0' }}>Due: {o.due_date ? new Date(o.due_date).toLocaleDateString() : 'N/A'} · {o.line_count} lines</p>
             </div>
             <span style={{
               padding: '4px 14px', borderRadius: '12px', fontSize: '11px', fontWeight: 600,

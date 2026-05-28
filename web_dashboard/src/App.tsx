@@ -35,6 +35,16 @@ export default function App() {
   const [initialCheckDone, setInitialCheckDone] = useState(false);
   const { events, connected } = useWebSocket();
 
+  // Refresh controls (5.5)
+  const [refreshStatus, setRefreshStatus] = useState<{
+    is_polling: boolean;
+    poll_interval_seconds: number;
+    last_refreshed: string | null;
+    mappings_loaded: number;
+  } | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastRefreshed, setLastRefreshed] = useState<string | null>(null);
+
   // Global dev mode — controls hardcoded factory visibility
   const [devMode, setDevMode] = useState(() => {
     try { return localStorage.getItem('cmsd_dev_mode') === 'true'; } catch { return false; }
@@ -102,6 +112,13 @@ export default function App() {
     }
   }, [activeMode, sourceCount]);
 
+  // WebSocket-driven immediate summary refresh (5.5)
+  useEffect(() => {
+    if (events.length > 0 && activeMode === 'dashboard') {
+      api.getSummary().then(setSummary).catch(() => {});
+    }
+  }, [events.length, activeMode]);
+
   // Refresh agent status periodically
   useEffect(() => {
     const interval = setInterval(() => {
@@ -111,6 +128,42 @@ export default function App() {
     }, 15000);
     return () => clearInterval(interval);
   }, []);
+
+  // Refresh status polling (5.5)
+  useEffect(() => {
+    if (activeMode !== 'dashboard') return;
+    api.getRefreshStatus().then(s => {
+      setRefreshStatus(s);
+      if (s.last_refreshed) setLastRefreshed(s.last_refreshed);
+    }).catch(() => {});
+    const interval = setInterval(() => {
+      api.getRefreshStatus().then(s => {
+        setRefreshStatus(s);
+        if (s.last_refreshed) setLastRefreshed(s.last_refreshed);
+      }).catch(() => {});
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [activeMode]);
+
+  // Manual refresh handler
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      const report = await api.refreshInstances();
+      setLastRefreshed(report.refreshed_at);
+    } catch (e: any) {
+      console.error('Refresh failed:', e);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  // Polling toggle
+  const handlePollingToggle = async (enable: boolean) => {
+    const interval = enable ? 30 : 0;
+    await api.setPolling(interval);
+    setRefreshStatus(prev => prev ? { ...prev, is_polling: enable, poll_interval_seconds: interval } : null);
+  };
 
   const toggleMode = () => {
     if (activeMode === 'wizard' && sourceCount === 0) return;
@@ -399,6 +452,85 @@ export default function App() {
           ))}
         </div>
       )}
+
+      {/* Refresh Controls Toolbar (5.5) */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: '16px',
+        padding: '10px 24px', borderBottom: '1px solid #334155',
+      }}>
+        <button
+          onClick={handleRefresh}
+          disabled={refreshing}
+          style={{
+            padding: '8px 16px', borderRadius: '6px', border: '1px solid #475569',
+            background: refreshing ? '#1e293b' : '#0f172a',
+            color: refreshing ? '#64748b' : '#93c5fd',
+            cursor: refreshing ? 'not-allowed' : 'pointer',
+            fontSize: '13px', fontWeight: 600,
+          }}
+        >
+          {refreshing ? '⟳ Refreshing...' : '↻ Refresh Data'}
+        </button>
+
+        {lastRefreshed && (
+          <span style={{ fontSize: '12px', color: '#64748b' }}>
+            Last: {new Date(lastRefreshed).toLocaleTimeString()}
+          </span>
+        )}
+
+        <span style={{ color: '#334155' }}>|</span>
+
+        <label style={{
+          display: 'flex', alignItems: 'center', gap: '8px',
+          fontSize: '13px', color: '#94a3b8', cursor: 'pointer',
+        }}>
+          <span>Auto-refresh</span>
+          <button
+            onClick={() => handlePollingToggle(!refreshStatus?.is_polling)}
+            style={{
+              width: '40px', height: '22px', borderRadius: '11px',
+              border: 'none',
+              background: refreshStatus?.is_polling ? '#22c55e' : '#334155',
+              cursor: 'pointer', position: 'relative',
+              transition: 'background 0.2s',
+            }}
+          >
+            <span style={{
+              position: 'absolute', top: '2px',
+              left: refreshStatus?.is_polling ? '20px' : '2px',
+              width: '18px', height: '18px', borderRadius: '50%',
+              background: '#fff', transition: 'left 0.2s',
+            }} />
+          </button>
+        </label>
+
+        {refreshStatus?.is_polling && (
+          <select
+            value={refreshStatus.poll_interval_seconds}
+            onChange={(e) => {
+              const val = parseInt(e.target.value);
+              api.setPolling(val);
+            }}
+            style={{
+              padding: '4px 8px', borderRadius: '4px',
+              background: '#1e293b', border: '1px solid #475569',
+              color: '#e2e8f0', fontSize: '12px',
+            }}
+          >
+            <option value={10}>10s</option>
+            <option value={30}>30s</option>
+            <option value={60}>60s</option>
+            <option value={300}>5m</option>
+          </select>
+        )}
+
+        <span style={{
+          marginLeft: 'auto', fontSize: '12px',
+          color: refreshStatus?.is_polling ? '#22c55e' : '#64748b',
+        }}>
+          {refreshStatus?.is_polling ? '● Live' : '○ Manual'}
+        </span>
+      </div>
 
       {/* Tab Bar */}
       <div style={{

@@ -282,6 +282,16 @@ export const agentApi = {
   // Streaming version — returns an abortable fetch for SSE consumption
   analyzeMappingStream(body: any, onStep: (step: any) => void, onResult: (result: any) => void, onError: (msg: string) => void) {
     const controller = new AbortController();
+    let resultReceived = false;
+
+    // Hard timeout — prevents infinite spinner
+    const timeout = setTimeout(() => {
+      if (!resultReceived) {
+        controller.abort();
+        onError('Analysis timed out after 120s. The LLM may be overloaded — try again.');
+      }
+    }, 120000);
+
     fetch(`${BASE}/mapping/analyze-stream`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -298,31 +308,52 @@ export const agentApi = {
         if (value) {
           buffer += decoder.decode(value, { stream: true });
         }
-        const lines = buffer.split('\n');
-        // Only consume complete events — keep incomplete final line in buffer
-        buffer = lines.pop() || '';
-        let eventType = '';
-        for (const line of lines) {
-          if (line.startsWith('event: ')) eventType = line.slice(7).trim();
-          else if (line.startsWith('data: ')) {
-            try {
-              const data = JSON.parse(line.slice(6));
-              if (eventType === 'step') onStep(data);
-              else if (eventType === 'result') onResult(data);
-              else if (eventType === 'error') onError(data.message);
-            } catch (e) {
-              console.error('SSE parse error:', e, 'line:', line.slice(0, 100));
+
+        // Split on \n\n (SSE message delimiter) — each chunk is a complete event
+        const messages = buffer.split('\n\n');
+        buffer = messages.pop() || ''; // keep incomplete message for next read
+
+        for (const msg of messages) {
+          if (!msg.trim()) continue;
+          const lines = msg.split('\n');
+          let eventType = '';
+          for (const line of lines) {
+            if (line.startsWith('event: ')) eventType = line.slice(7).trim();
+            else if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.slice(6));
+                if (eventType === 'step') onStep(data);
+                else if (eventType === 'result') { onResult(data); resultReceived = true; }
+                else if (eventType === 'error') onError(data.message);
+              } catch (e) {
+                console.error('SSE parse error:', e, 'line:', line.slice(0, 100));
+              }
             }
           }
         }
-        if (done) break;
-      }
-      // Process any remaining data in buffer after stream ends
-      if (buffer.trim()) {
-        console.warn('SSE stream ended with unprocessed data:', buffer.slice(0, 200));
+
+        if (done) {
+          // Process final incomplete message if it has both event and data
+          if (buffer.trim()) {
+            const lines = buffer.split('\n');
+            let eventType = '';
+            for (const line of lines) {
+              if (line.startsWith('event: ')) eventType = line.slice(7).trim();
+              else if (line.startsWith('data: ')) {
+                try {
+                  const data = JSON.parse(line.slice(6));
+                  if (eventType === 'result') { onResult(data); resultReceived = true; }
+                } catch { /* final chunk incomplete, ignore */ }
+              }
+            }
+          }
+          break;
+        }
       }
     }).catch((e) => {
       if (e.name !== 'AbortError') onError(e.message || 'Stream failed');
+    }).finally(() => {
+      clearTimeout(timeout);
     });
     return controller;
   },
