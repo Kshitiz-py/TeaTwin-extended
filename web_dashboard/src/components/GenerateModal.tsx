@@ -199,8 +199,8 @@ export default function GenerateModal({ open, mappingIds, onClose, onComplete, o
               {
                 label: 'Field Coverage',
                 passed: preflightResult.checks.field_coverage.passed,
-                detail: preflightResult.checks.field_coverage.unapproved?.length > 0
-                  ? `${preflightResult.checks.field_coverage.unapproved.length} field(s) not approved`
+                detail: preflightResult.checks.field_coverage.flagged?.length > 0
+                  ? `${preflightResult.checks.field_coverage.flagged.length} field(s) flagged`
                   : 'All fields approved',
               },
               {

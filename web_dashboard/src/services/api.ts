@@ -48,7 +48,7 @@ export interface PreflightResult {
   checks: {
     dependencies: { passed: boolean; auto_selected: string[]; missing: any[] };
     relations: { passed: boolean; missing_targets: PreflightRelationIssue[] };
-    field_coverage: { passed: boolean; unapproved: any[] };
+    field_coverage: { passed: boolean; flagged: any[] };
     api_reachability: { passed: boolean; unreachable: any[] };
   };
 }

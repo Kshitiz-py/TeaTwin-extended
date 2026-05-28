@@ -986,6 +986,11 @@ async def list_mappings():
                 flagged = sum(1 for f in field_map.values()
                               if isinstance(f, dict) and f.get("status") == "flagged")
                 relations = data.get("relations", [])
+                relation_targets = []
+                if isinstance(relations, list):
+                    for r in relations:
+                        if isinstance(r, dict) and r.get("target_entity"):
+                            relation_targets.append(r["target_entity"])
                 mappings.append({
                     "id": filename.replace(".json", ""),
                     "data_point": data.get("data_point", data.get("data_point_name", "")),
@@ -996,6 +1001,7 @@ async def list_mappings():
                     "approved_count": approved,
                     "flagged_count": flagged,
                     "relation_count": len(relations) if isinstance(relations, list) else 0,
+                    "relation_targets": relation_targets,
                     "confirmed_at": data.get("confirmed_at", ""),
                 })
             except Exception as e:
@@ -1076,6 +1082,24 @@ async def infer_dependencies(body: dict):
         "independent_entities": sorted(INDEPENDENT_ENTITIES),
         "all_entities": CMSD_ENTITIES,
     }
+
+
+# ─── CMSD Catalog ────────────────────────────────────────────
+
+@router.get("/cmsd-catalog")
+async def get_cmsd_catalog():
+    """
+    Return CMSD entity catalog with human-readable metadata.
+    Introspects actual CMSD Pydantic models — always in sync with the schema.
+    Used by frontend to show rich entity descriptions, field requirements,
+    reference paths, and examples in the MappingWizard entity picker.
+    """
+    try:
+        from .cmsd_catalog import get_catalog
+        return get_catalog()
+    except Exception as e:
+        logger.error(f"Failed to build CMSD catalog: {e}")
+        raise HTTPException(500, f"Catalog build failed: {e}")
 
 
 # ─── Code Generation Pipeline ───────────────────────────────

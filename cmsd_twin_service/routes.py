@@ -219,6 +219,9 @@ async def validate_preflight(body: dict):
                 mapping = orchestrator._registry._mappings.get(mid, {})
                 source = mapping.get("source", {})
                 url = f"{source.get('base_url', '')}{source.get('endpoint', '')}"
+                # Skip reachability check if URL is empty (mapping has no source configured)
+                if not url or not url.startswith("http"):
+                    continue
                 try:
                     await client.fetch(url, source.get("method", "GET"),
                                        auth_config=source.get("auth", {"type": "none"}))

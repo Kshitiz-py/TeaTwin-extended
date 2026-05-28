@@ -4,6 +4,7 @@ import PayloadViewer from './PayloadViewer';
 import MappingTable from './MappingTable';
 import EntityPreview from './EntityPreview';
 import MappingChat from './MappingChat';
+import RichEntityPicker from './RichEntityPicker';
 import { agentApi, FetchedPayload } from '../services/agentApi';
 import { SourceData } from './SourceCard';
 
@@ -182,14 +183,19 @@ export default function MappingWizard({ onNavigateToQueue, preloadedMapping, onC
   const [inferredDeps, setInferredDeps] = useState<string[]>([]);
   const [indepEntities, setIndepEntities] = useState<Set<string>>(new Set(CMSD_ENTITIES));
 
+  const [existingMappings, setExistingMappings] = useState<Array<{ cmsd_entity: string; relation_targets?: string[] }>>([]);
+
   // Fetch existing confirmed mapping entity types for tier computation
   useEffect(() => {
     agentApi.listMappings().then(data => {
       const entSet = new Set<string>();
+      const mappingList: Array<{ cmsd_entity: string; relation_targets?: string[] }> = [];
       for (const m of data.mappings) {
         if (m.cmsd_entity) entSet.add(m.cmsd_entity);
+        mappingList.push({ cmsd_entity: m.cmsd_entity, relation_targets: m.relation_targets });
       }
       setExistingEntities(entSet);
+      setExistingMappings(mappingList);
     }).catch(() => {});
   }, [phase]);
 
@@ -242,6 +248,7 @@ export default function MappingWizard({ onNavigateToQueue, preloadedMapping, onC
       // Clear refs when not editing — prevents stale data from previous edit sessions
       preloadedPayloadsRef.current = [];
       preloadedEndpointsRef.current = [];
+      setRelationApprovals({});
       return;
     }
     const m = preloadedMapping;
@@ -303,6 +310,16 @@ export default function MappingWizard({ onNavigateToQueue, preloadedMapping, onC
     }
     if (Object.keys(newStatuses).length > 0) {
       setFieldStatuses(prev => ({ ...prev, ...newStatuses }));
+    }
+
+    // Restore relation approvals from saved mapping (Issue 06)
+    const savedRelations = m.relations || [];
+    if (savedRelations.length > 0) {
+      const relApprovals: Record<number, 'approved'> = {};
+      savedRelations.forEach((_: any, idx: number) => {
+        relApprovals[idx] = 'approved';
+      });
+      setRelationApprovals(relApprovals);
     }
   }, [preloadedMapping]);
 
@@ -975,19 +992,42 @@ export default function MappingWizard({ onNavigateToQueue, preloadedMapping, onC
                 </button>
               </div>
 
-              {/* ═══ Entity Selection Step ═══ */}
+              {/* ═══ Entity Selection Step (Phase 1) ═══ */}
               <div style={{ marginTop: '20px', paddingTop: '18px', borderTop: '2px solid #475569' }}>
-                <label style={{ ...labelStyle, marginBottom: '8px' }}>What do you want to map?</label>
-
-                {/* Recommendation tiers */}
-                <EntityTierPicker
-                  cmsdEntity={cmsdEntity}
+                <RichEntityPicker
+                  selectedEntity={cmsdEntity}
                   onSelect={setCmsdEntity}
                   existingEntities={existingEntities}
+                  existingMappings={existingMappings}
+                  onContinue={approveAndMap}
+                  canContinue={canApprove}
                 />
 
-                {/* Direct select fallback */}
-                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                {/* Blocked entity warning */}
+                {(() => {
+                  const deps = existingMappings.reduce<string[]>((acc, m) => {
+                    if (m.cmsd_entity === cmsdEntity && m.relation_targets) {
+                      acc.push(...m.relation_targets);
+                    }
+                    return acc;
+                  }, []);
+                  const missing = deps.filter(d => !existingEntities.has(d));
+                  if (missing.length === 0 || !cmsdEntity) return null;
+                  return (
+                    <div style={{
+                      padding: '10px 14px', marginTop: '8px',
+                      background: '#422006', borderRadius: '6px',
+                      border: '1px solid #78350f',
+                    }}>
+                      <span style={{ color: '#fde68a', fontSize: '12px', fontWeight: 600 }}>
+                        {cmsdEntity} depends on {missing.join(', ')} — map {'them' in missing ? 'these' : 'it'} first.
+                      </span>
+                    </div>
+                  );
+                })()}
+
+                {/* Data point name + entity (shown below picker) */}
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap', marginTop: '8px' }}>
                   <div style={{ minWidth: '180px' }}>
                     <label style={labelStyle}>Data Point Name</label>
                     <input value={dataPointName} onChange={e => setDataPointName(e.target.value)} placeholder="e.g. Factory Resources" style={inputStyle} />
@@ -1691,21 +1731,39 @@ interface EntityTierPickerProps {
   cmsdEntity: string;
   onSelect: (entity: string) => void;
   existingEntities: Set<string>;
+  mappings?: Array<{ cmsd_entity: string; relation_targets?: string[] }>;
 }
 
-function EntityTierPicker({ cmsdEntity, onSelect, existingEntities }: EntityTierPickerProps) {
+function EntityTierPicker({ cmsdEntity, onSelect, existingEntities, mappings = [] }: EntityTierPickerProps) {
+  // Build dynamic dependency map from relation_targets in existing mappings
+  const dynamicDeps: Record<string, string[]> = {};
+  for (const m of mappings) {
+    const targets = m.relation_targets || [];
+    if (targets.length > 0) {
+      if (!dynamicDeps[m.cmsd_entity]) {
+        dynamicDeps[m.cmsd_entity] = [];
+      }
+      dynamicDeps[m.cmsd_entity].push(...targets);
+    }
+  }
+
+  const getEffectiveDeps = (entity: string): string[] => {
+    // Dynamic deps from relations take priority; fall back to static schema deps
+    return dynamicDeps[entity] || CMSD_ENTITY_DEPS[entity] || [];
+  };
+
   const unmapped = (filter: (e: string) => boolean) =>
     CMSD_ENTITIES.filter(e => filter(e) && !existingEntities.has(e));
 
-  const independent = CMSD_ENTITIES.filter(e => (CMSD_ENTITY_DEPS[e] || []).length === 0);
-  const dependent = CMSD_ENTITIES.filter(e => (CMSD_ENTITY_DEPS[e] || []).length > 0);
+  const independent = CMSD_ENTITIES.filter(e => getEffectiveDeps(e).length === 0);
+  const dependent = CMSD_ENTITIES.filter(e => getEffectiveDeps(e).length > 0);
 
   const readyDeps = dependent.filter(e => {
-    const deps = CMSD_ENTITY_DEPS[e] || [];
+    const deps = getEffectiveDeps(e);
     return deps.every(d => existingEntities.has(d));
   });
   const needsDeps = dependent.filter(e => {
-    const deps = CMSD_ENTITY_DEPS[e] || [];
+    const deps = getEffectiveDeps(e);
     return !deps.every(d => existingEntities.has(d));
   });
 
@@ -1751,7 +1809,7 @@ function EntityTierPicker({ cmsdEntity, onSelect, existingEntities }: EntityTier
           </span>
           <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
             {unmapped(e => readyDeps.includes(e)).map(e => {
-              const deps = CMSD_ENTITY_DEPS[e] || [];
+              const deps = getEffectiveDeps(e) || [];
               return (
                 <button key={e} onClick={() => onSelect(e)} style={{
                   padding: '3px 10px', borderRadius: '14px',
@@ -1776,7 +1834,7 @@ function EntityTierPicker({ cmsdEntity, onSelect, existingEntities }: EntityTier
           </span>
           <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
             {unmapped(e => needsDeps.includes(e)).map(e => {
-              const deps = CMSD_ENTITY_DEPS[e] || [];
+              const deps = getEffectiveDeps(e) || [];
               const missing = deps.filter(d => !existingEntities.has(d));
               return (
                 <button key={e} onClick={() => onSelect(e)} style={{

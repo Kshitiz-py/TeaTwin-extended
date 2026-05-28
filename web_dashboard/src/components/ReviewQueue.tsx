@@ -121,9 +121,18 @@ export default function ReviewQueue({ embedded = false, onGenerate, onEdit, onNa
       }
 
       if (!result.passed) {
-        // Block on field coverage issues
+        // Build a specific message about what failed
+        const failures: string[] = [];
+        if (!result.checks.field_coverage.passed) {
+          const count = result.checks.field_coverage.flagged?.length || 0;
+          failures.push(`${count} field(s) flagged for review`);
+        }
+        if (!result.checks.api_reachability.passed) {
+          const count = result.checks.api_reachability.unreachable?.length || 0;
+          failures.push(`${count} API source(s) unreachable`);
+        }
         setPreflightLoading(false);
-        alert('Cannot generate: some fields are not approved. Please edit the mappings and approve all fields.');
+        alert(`Cannot generate:\n${failures.join('\n')}\n\nEdit the mapping(s) to resolve these issues.`);
         return;
       }
 

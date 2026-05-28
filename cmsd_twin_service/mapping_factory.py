@@ -410,7 +410,7 @@ class MappingDrivenFactory:
 
                     # Deep-set the reference at cmsd_path
                     try:
-                        self._deep_set_reference(instance, cmsd_path, reference)
+                        self._deep_set_reference(instance, cmsd_path, reference, doc_index)
                     except Exception as e:
                         warnings.append({
                             "entity_type": entity_type,
@@ -459,9 +459,12 @@ class MappingDrivenFactory:
             logger.warning(f"Failed to build {ref_class.__name__}: {e}")
             return None
 
-    def _deep_set_reference(self, entity: Any, cmsd_path: str, reference: Any):
+    def _deep_set_reference(self, entity: Any, cmsd_path: str, reference: Any,
+                            doc_index: dict[str, list] | None = None):
         """Walk/create the cmsd_path on the entity and set the leaf to reference.
         Handles list indices ([0]) and nested object attributes.
+        When an intermediate entity type exists in doc_index (built earlier by DAG),
+        uses that entity instead of creating an empty shell.
 
         Example path: 'order_lines[0].part_description.part_type'
         """
@@ -476,19 +479,16 @@ class MappingDrivenFactory:
                 else:
                     existing = getattr(cur, seg["name"], None)
                     if existing is None:
-                        # Need to create the intermediate object
-                        field_type = self._infer_field_type(type(cur).__name__, seg["name"])
-                        if field_type:
-                            try:
-                                existing = field_type()
-                            except Exception:
-                                existing = None
-                        if existing is None:
-                            raise ValueError(
-                                f"Cannot create intermediate object for {seg['name']} "
-                                f"on {type(cur).__name__}"
-                            )
-                        setattr(cur, seg["name"], existing)
+                        existing = self._get_or_create_intermediate(
+                            type(cur).__name__, seg["name"], doc_index
+                        )
+                        if existing is not None:
+                            setattr(cur, seg["name"], existing)
+                    if existing is None:
+                        raise ValueError(
+                            f"Cannot create intermediate object for {seg['name']} "
+                            f"on {type(cur).__name__}"
+                        )
                     cur = existing
             elif seg["type"] == "list":
                 idx = seg["index"]
@@ -498,9 +498,13 @@ class MappingDrivenFactory:
                     setattr(cur, seg["name"], lst)
                 # Ensure list is long enough
                 while len(lst) <= idx:
-                    # Create default item for missing list entries
                     item_type = self._infer_list_item_type(type(cur).__name__, seg["name"])
-                    if item_type:
+                    existing_item = self._get_or_create_intermediate(
+                        type(cur).__name__, seg["name"], doc_index
+                    )
+                    if existing_item is not None:
+                        lst.append(existing_item)
+                    elif item_type:
                         try:
                             lst.append(item_type())
                         except Exception:
@@ -547,6 +551,49 @@ class MappingDrivenFactory:
             if args:
                 return self._unwrap_optional(args[0])
         return None
+
+    def _get_or_create_intermediate(self, parent_entity: str, field_name: str,
+                                     doc_index: dict[str, list] | None = None) -> Any | None:
+        """Get an existing entity from doc_index or create a new empty instance.
+        If the field type is a top-level CMSD entity (in ENTITY_REGISTRY) and instances
+        exist in doc_index, use one of those — the DAG already built them. Otherwise,
+        create an empty shell for intermediate wrapper types (e.g. OrderLinePartDescription)."""
+        field_type = self._infer_field_type(parent_entity, field_name)
+        if field_type is None:
+            # Try list item type
+            field_type = self._infer_list_item_type(parent_entity, field_name)
+
+        if field_type is None:
+            return None
+
+        type_name = field_type.__name__
+
+        # If this is a top-level CMSD entity type, check the document first
+        if type_name in self.ENTITY_REGISTRY and doc_index:
+            existing = doc_index.get(type_name, [])
+            if existing:
+                # Return the first unclaimed entity of this type
+                for inst in existing:
+                    conn = getattr(inst, '_connection', None)
+                    if conn and conn.get('_claimed_by_relation'):
+                        continue
+                    # Mark as claimed so another relation doesn't steal it
+                    if conn:
+                        conn['_claimed_by_relation'] = True
+                    return inst
+                # All claimed — still return first one (better than nothing)
+                return existing[0]
+            # Entity type registered but no instances in doc — create empty
+            try:
+                return field_type()
+            except Exception:
+                return None
+
+        # Intermediate wrapper type (not a top-level entity) — create new
+        try:
+            return field_type()
+        except Exception:
+            return None
 
     def _index_document(self, doc: CMSDDocument) -> dict[str, list]:
         """Index all entity instances in the document by entity type."""

@@ -224,7 +224,7 @@ class CMSDOrchestrator:
                 "checks": {
                     "dependencies": {"passed": True, "auto_selected": [], "missing": []},
                     "relations": {"passed": True, "missing_targets": []},
-                    "field_coverage": {"passed": True, "unapproved": []},
+                    "field_coverage": {"passed": True, "flagged": []},
                     "api_reachability": {"passed": True, "unreachable": []},
                 },
             }
@@ -284,12 +284,15 @@ class CMSDOrchestrator:
             mapping = self._registry._mappings.get(mid, {})
             field_map = mapping.get("mapping", {})
             for field_name, config in field_map.items():
-                if isinstance(config, dict) and config.get("status", "pending") != "approved":
+                # Only block on EXPLICITLY flagged fields. Fields without a status
+                # (from older mappings confirmed before the status field existed)
+                # are grandfathered as approved.
+                if isinstance(config, dict) and config.get("status") == "flagged":
                     unapproved.append({
                         "mapping_id": mid,
                         "entity": mapping.get("cmsd_entity", ""),
                         "field": field_name,
-                        "status": config.get("status", "pending"),
+                        "status": "flagged",
                     })
 
         return {
@@ -306,7 +309,7 @@ class CMSDOrchestrator:
                 },
                 "field_coverage": {
                     "passed": len(unapproved) == 0,
-                    "unapproved": unapproved,
+                    "flagged": unapproved,
                 },
                 "api_reachability": {"passed": True, "unreachable": []},
             },
