@@ -950,52 +950,62 @@ export default function MappingWizard({ onNavigateToQueue, preloadedMapping, onC
         </div>
       ) : (
         <>
-          {/* ═══════ PHASE 1: FETCH ═══════ */}
+          {/* ═══════ PHASE 1: ENTITY SELECTION + ENDPOINTS ═══════ */}
           {(phase === 'fetch' || phase === 'analyzing') && (
             <>
-              {endpoints.length === 0 && (
-                <div style={{ padding: '32px', textAlign: 'center', background: '#1e293b', borderRadius: '8px', border: '1px dashed #475569', color: '#94a3b8', fontSize: '13px', marginBottom: '12px' }}>
-                  Add at least one endpoint to begin.
-                </div>
-              )}
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {endpoints.map((ep, i) => (
-                  <div key={i}>
-                    <EndpointRow
-                      data={ep} sources={sources}
-                      onChange={(d) => updateEndpoint(i, d)}
-                      onRemove={() => removeEndpoint(i)}
-                      onFire={() => fireSingle(i)}
-                      loading={loading.has(i)}
-                      canRemove={endpoints.length > 1}
-                      approved={approvedIndices.has(i)}
-                      onApproveChange={() => toggleApprove(i)}
-                      payloadStatus={getPayloadStatus(i)}
-                    />
-                    {payloads[i] && <PayloadViewer payload={payloads[i]} onRetry={() => fireSingle(i)} />}
-                  </div>
-                ))}
-              </div>
-
-              <div style={{ display: 'flex', gap: '10px', marginTop: '14px', paddingTop: '14px', borderTop: '1px solid #334155', alignItems: 'center' }}>
-                <button onClick={addEndpoint} disabled={isLoadingAny} style={{ padding: '8px 18px', borderRadius: '6px', border: '1px dashed #475569', background: '#1e3a5f', color: isLoadingAny ? '#64748b' : '#93c5fd', cursor: isLoadingAny ? 'not-allowed' : 'pointer', fontSize: '13px', fontWeight: 600 }}>
-                  + Add Endpoint
-                </button>
-                <button onClick={fireAll} disabled={endpoints.length === 0 || isLoadingAny} style={{ padding: '10px 28px', borderRadius: '6px', border: 'none', background: endpoints.length === 0 || isLoadingAny ? '#334155' : '#7c3aed', color: endpoints.length === 0 || isLoadingAny ? '#64748b' : '#fff', cursor: endpoints.length === 0 || isLoadingAny ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  {fireAllLoading ? <>⏳ Fetching {endpoints.length} endpoint{endpoints.length !== 1 ? 's' : ''}...</> : <>🚀 Fire All ({endpoints.length})</>}
-                </button>
-              </div>
-
-              {/* ═══ Entity selection (at top, before endpoints) ═══ */}
+              {/* ── Section 1: What do you want to map? ── */}
               <RichEntityPicker
                 selectedEntity={cmsdEntity}
                 onSelect={setCmsdEntity}
                 existingEntities={existingEntities}
               />
 
-              {/* ═══ Data point name + approve ═══ */}
-              <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap', marginTop: '14px' }}>
+              {/* ── Section 2: API Endpoints ── */}
+              <div style={{
+                marginTop: '16px', paddingTop: '14px', borderTop: '1px solid #334155',
+              }}>
+                <label style={labelStyle}>API Endpoints</label>
+                <p style={{ color: '#64748b', margin: '0 0 10px', fontSize: '11px' }}>
+                  Add the API endpoints that contain data for {cmsdEntity || 'this entity'}.
+                </p>
+
+                {endpoints.length === 0 && (
+                  <div style={{ padding: '24px', textAlign: 'center', background: '#1e293b', borderRadius: '8px', border: '1px dashed #475569', color: '#94a3b8', fontSize: '13px', marginBottom: '10px' }}>
+                    Add at least one endpoint to begin.
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {endpoints.map((ep, i) => (
+                    <div key={i}>
+                      <EndpointRow
+                        data={ep} sources={sources}
+                        onChange={(d) => updateEndpoint(i, d)}
+                        onRemove={() => removeEndpoint(i)}
+                        onFire={() => fireSingle(i)}
+                        loading={loading.has(i)}
+                        canRemove={endpoints.length > 1}
+                        approved={approvedIndices.has(i)}
+                        onApproveChange={() => toggleApprove(i)}
+                        payloadStatus={getPayloadStatus(i)}
+                      />
+                      {payloads[i] && <PayloadViewer payload={payloads[i]} onRetry={() => fireSingle(i)} />}
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ display: 'flex', gap: '10px', marginTop: '10px', alignItems: 'center' }}>
+                  <button onClick={addEndpoint} disabled={isLoadingAny} style={{ padding: '8px 18px', borderRadius: '6px', border: '1px dashed #475569', background: '#1e3a5f', color: isLoadingAny ? '#64748b' : '#93c5fd', cursor: isLoadingAny ? 'not-allowed' : 'pointer', fontSize: '13px', fontWeight: 600 }}>
+                    + Add Endpoint
+                  </button>
+                  <button onClick={fireAll} disabled={endpoints.length === 0 || isLoadingAny} style={{ padding: '10px 28px', borderRadius: '6px', border: 'none', background: endpoints.length === 0 || isLoadingAny ? '#334155' : '#7c3aed', color: endpoints.length === 0 || isLoadingAny ? '#64748b' : '#fff', cursor: endpoints.length === 0 || isLoadingAny ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {fireAllLoading ? <>⏳ Fetching {endpoints.length} endpoint{endpoints.length !== 1 ? 's' : ''}...</> : <>🚀 Fire All ({endpoints.length})</>}
+                  </button>
+                </div>
+              </div>
+
+              {/* ── Section 3: Name & Approve ── */}
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap', marginTop: '14px', paddingTop: '14px', borderTop: '1px solid #334155' }}>
                 <div style={{ minWidth: '180px' }}>
                   <label style={labelStyle}>Data Point Name</label>
                   <input value={dataPointName} onChange={e => setDataPointName(e.target.value)} placeholder="e.g. Factory Resources" style={inputStyle} />
