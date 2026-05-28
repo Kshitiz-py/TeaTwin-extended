@@ -963,15 +963,13 @@ export default function MappingWizard({ onNavigateToQueue, preloadedMapping, onC
               />
 
               {/* ── Section 2: API Endpoints ── */}
-              <div style={{ marginTop: '20px', paddingTop: '18px', borderTop: '1px solid #1e293b' }}>
-                <div style={{
-                  display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px',
-                }}>
+              <div style={{ marginTop: '20px', paddingTop: '18px', borderTop: '1px solid rgba(51,65,85,0.3)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
                   <span style={{
                     width: '28px', height: '28px', borderRadius: '8px',
-                    background: '#1e3a5f', color: '#93c5fd',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: '14px', fontWeight: 700, flexShrink: 0,
+                    background: 'linear-gradient(135deg, #1e40af, #3b82f6)',
+                    color: '#dbeafe', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: '13px', fontWeight: 700, flexShrink: 0, boxShadow: '0 2px 8px rgba(59,130,246,0.3)',
                   }}>2</span>
                   <div>
                     <h3 style={{ color: '#f1f5f9', margin: 0, fontSize: '14px', fontWeight: 600 }}>
@@ -1018,16 +1016,14 @@ export default function MappingWizard({ onNavigateToQueue, preloadedMapping, onC
                 </div>
               </div>
 
-              {/* ── Section 3: Name & Go ── */}
-              <div style={{ marginTop: '20px', paddingTop: '18px', borderTop: '1px solid #1e293b' }}>
-                <div style={{
-                  display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px',
-                }}>
+              {/* ── Section 3: Name & Generate ── */}
+              <div style={{ marginTop: '20px', paddingTop: '18px', borderTop: '1px solid rgba(51,65,85,0.3)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
                   <span style={{
                     width: '28px', height: '28px', borderRadius: '8px',
-                    background: '#14532d', color: '#86efac',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: '14px', fontWeight: 700, flexShrink: 0,
+                    background: 'linear-gradient(135deg, #166534, #22c55e)',
+                    color: '#d1fae5', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: '13px', fontWeight: 700, flexShrink: 0, boxShadow: '0 2px 8px rgba(34,197,94,0.3)',
                   }}>3</span>
                   <div>
                     <h3 style={{ color: '#f1f5f9', margin: 0, fontSize: '14px', fontWeight: 600 }}>
@@ -1041,9 +1037,23 @@ export default function MappingWizard({ onNavigateToQueue, preloadedMapping, onC
                 <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
                   <div style={{ minWidth: '220px' }}>
                     <label style={labelStyle}>Data Point Name</label>
-                    <input value={dataPointName} onChange={e => setDataPointName(e.target.value)} placeholder="e.g. Factory Resources" style={inputStyle} />
+                    <input value={dataPointName} onChange={e => setDataPointName(e.target.value)} placeholder="e.g. Factory Resources" style={{
+                      ...inputStyle,
+                      border: '1px solid #1e293b',
+                      borderRadius: '8px',
+                    }} />
                   </div>
-                  <button onClick={approveAndMap} disabled={!canApprove} style={{ padding: '12px 32px', borderRadius: '8px', border: 'none', background: canApprove ? '#22c55e' : '#1e293b', color: canApprove ? '#fff' : '#475569', cursor: canApprove ? 'pointer' : 'not-allowed', fontSize: '14px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px', whiteSpace: 'nowrap', height: '42px' }}>
+                  <button onClick={approveAndMap} disabled={!canApprove} style={{
+                    padding: '12px 32px', borderRadius: '8px', border: 'none',
+                    background: canApprove
+                      ? 'linear-gradient(135deg, #16a34a, #22c55e)'
+                      : '#1e293b',
+                    color: canApprove ? '#fff' : '#475569',
+                    cursor: canApprove ? 'pointer' : 'not-allowed',
+                    fontSize: '14px', fontWeight: 700, whiteSpace: 'nowrap', height: '42px',
+                    boxShadow: canApprove ? '0 2px 12px rgba(34,197,94,0.3)' : 'none',
+                    display: 'flex', alignItems: 'center', gap: '8px',
+                  }}>
                     {approvedCount > 0 ? `Approve ${approvedCount} Selected & Map` : 'Approve Selected & Map'}
                   </button>
                 </div>
