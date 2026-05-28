@@ -155,6 +155,9 @@ export default function MappingWizard({ onNavigateToQueue, preloadedMapping, onC
   const [guidanceInput, setGuidanceInput] = useState('');
   const [guidanceLoading, setGuidanceLoading] = useState(false);
 
+  // Relation approvals (Issue 06)
+  const [relationApprovals, setRelationApprovals] = useState<Record<number, 'approved' | 'rejected' | 'pending'>>({});
+
   // Confirm mapping
   const [confirmLoading, setConfirmLoading] = useState(false);
   const [confirmPending, setConfirmPending] = useState(false);  // two-step: show Edit / Save & Continue
@@ -665,6 +668,13 @@ export default function MappingWizard({ onNavigateToQueue, preloadedMapping, onC
       if (dataPointName) {
         mappingResult.mapping.data_point = dataPointName;
       }
+      // Merge approved relations into mapping (Issue 06)
+      const allRelations = mappingResult?.mapping?.relations || mappingResult?.relations || [];
+      const approvedRelations = allRelations.filter((_: any, idx: number) =>
+        (relationApprovals[idx] || 'pending') === 'approved'
+      );
+      mappingResult.mapping.relations = approvedRelations;
+
       const id = `${(dataPointName || 'mapping').replace(/\s+/g, '-').toLowerCase()}-${Date.now()}`;
       const approvedPayloads = approvedPayloadEntries
         .filter(e => e.payload?.status === 'success' && e.payload?.raw_payload)
@@ -1193,6 +1203,145 @@ export default function MappingWizard({ onNavigateToQueue, preloadedMapping, onC
                   </span>
                 </div>
               )}
+
+              {/* ── Entity Relations (Issue 06) ── */}
+              {(() => {
+                const relations = mappingResult?.mapping?.relations || mappingResult?.relations || [];
+                if (relations.length === 0) return null;
+                return (
+                  <div style={{
+                    marginBottom: '14px', padding: '14px 16px',
+                    background: '#1e1b4b', borderRadius: '10px',
+                    border: '2px solid #6366f1',
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+                      <span style={{ fontSize: '16px' }}>🔗</span>
+                      <span style={{ fontSize: '13px', fontWeight: 700, color: '#c7d2fe' }}>
+                        Entity Relations
+                      </span>
+                      <span style={{
+                        padding: '2px 8px', borderRadius: '10px', background: '#3730a3',
+                        color: '#a5b4fc', fontSize: '11px', fontWeight: 600,
+                      }}>
+                        {relations.length} detected
+                      </span>
+                    </div>
+                    <p style={{ fontSize: '11px', color: '#818cf8', margin: '0 0 10px' }}>
+                      These fields in your API payload reference OTHER CMSD entities. Accept them to wire entities together at generation time.
+                    </p>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {relations.map((rel: any, idx: number) => {
+                        const approval = relationApprovals[idx] || 'pending';
+                        const targetExists = existingEntities.has(rel.target_entity);
+                        return (
+                          <div key={idx} style={{
+                            display: 'flex', alignItems: 'center', gap: '10px',
+                            padding: '10px 14px', borderRadius: '8px',
+                            background: approval === 'approved' ? '#064e3b' :
+                                        approval === 'rejected' ? '#1e293b' : '#0f172a',
+                            border: approval === 'approved' ? '1px solid #22c55e' :
+                                    approval === 'rejected' ? '1px solid #334155' :
+                                    '1px solid #475569',
+                            opacity: approval === 'rejected' ? 0.5 : 1,
+                          }}>
+                            {/* Source → Target path */}
+                            <div style={{ flex: 1 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                <code style={{
+                                  color: '#f1f5f9', background: '#1e293b', padding: '2px 6px',
+                                  borderRadius: '3px', fontSize: '11px', fontFamily: 'monospace',
+                                }}>
+                                  {rel.match_key?.source?.api_path || '(source field)'}
+                                </code>
+                                <span style={{ color: '#6366f1', fontSize: '16px' }}>→</span>
+                                <code style={{
+                                  color: '#c7d2fe', background: '#312e81', padding: '2px 6px',
+                                  borderRadius: '3px', fontSize: '11px', fontFamily: 'monospace',
+                                  fontWeight: 600,
+                                }}>
+                                  {rel.target_entity}
+                                </code>
+                                <span style={{ color: '#818cf8', fontSize: '10px', fontFamily: 'monospace' }}>
+                                  @ {rel.cmsd_path}
+                                </span>
+                              </div>
+                              <div style={{ display: 'flex', gap: '12px', marginTop: '4px' }}>
+                                <span style={{ fontSize: '10px', color: '#64748b' }}>
+                                  Match: target.{rel.match_key?.target?.field || 'identifier'}
+                                </span>
+                                {rel.confidence && (
+                                  <span style={{
+                                    fontSize: '10px', padding: '1px 6px', borderRadius: '8px',
+                                    background: rel.confidence === 'high' ? '#14532d' : '#422006',
+                                    color: rel.confidence === 'high' ? '#86efac' : '#fde68a',
+                                  }}>
+                                    {rel.confidence} confidence
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Target availability */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              {targetExists ? (
+                                <span style={{
+                                  fontSize: '10px', color: '#86efac', background: '#14532d',
+                                  padding: '2px 8px', borderRadius: '8px', whiteSpace: 'nowrap',
+                                }}>
+                                  ✓ mapping exists
+                                </span>
+                              ) : (
+                                <span style={{
+                                  fontSize: '10px', color: '#fde68a', background: '#422006',
+                                  padding: '2px 8px', borderRadius: '8px', whiteSpace: 'nowrap',
+                                }}>
+                                  ⚠ no mapping yet
+                                </span>
+                              )}
+
+                              {/* Accept / Reject buttons */}
+                              {approval !== 'approved' && (
+                                <button onClick={() => setRelationApprovals(prev => ({ ...prev, [idx]: 'approved' }))}
+                                  style={{
+                                    padding: '4px 10px', borderRadius: '4px', border: '1px solid #22c55e',
+                                    background: 'transparent', color: '#86efac', cursor: 'pointer',
+                                    fontSize: '11px', fontWeight: 600, whiteSpace: 'nowrap',
+                                  }}>
+                                  ✓ Accept
+                                </button>
+                              )}
+                              {approval !== 'rejected' && (
+                                <button onClick={() => setRelationApprovals(prev => ({ ...prev, [idx]: 'rejected' }))}
+                                  style={{
+                                    padding: '4px 10px', borderRadius: '4px', border: '1px solid #ef4444',
+                                    background: 'transparent', color: '#fca5a5', cursor: 'pointer',
+                                    fontSize: '11px', fontWeight: 500, whiteSpace: 'nowrap',
+                                  }}>
+                                  ✕
+                                </button>
+                              )}
+                              {approval === 'approved' && (
+                                <span style={{ color: '#86efac', fontSize: '14px' }}>✓</span>
+                              )}
+                              {approval === 'rejected' && (
+                                <button onClick={() => setRelationApprovals(prev => ({ ...prev, [idx]: 'pending' }))}
+                                  style={{
+                                    padding: '4px 8px', borderRadius: '4px', border: '1px solid #475569',
+                                    background: 'transparent', color: '#94a3b8', cursor: 'pointer',
+                                    fontSize: '11px',
+                                  }}>
+                                  Undo
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* ── Expandable endpoint chips ── */}
               {endpointsExpanded && (

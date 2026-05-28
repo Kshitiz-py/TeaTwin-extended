@@ -985,6 +985,7 @@ async def list_mappings():
                                if isinstance(f, dict) and f.get("status", "approved") != "flagged")
                 flagged = sum(1 for f in field_map.values()
                               if isinstance(f, dict) and f.get("status") == "flagged")
+                relations = data.get("relations", [])
                 mappings.append({
                     "id": filename.replace(".json", ""),
                     "data_point": data.get("data_point", data.get("data_point_name", "")),
@@ -994,6 +995,7 @@ async def list_mappings():
                     "field_count": len(field_map),
                     "approved_count": approved,
                     "flagged_count": flagged,
+                    "relation_count": len(relations) if isinstance(relations, list) else 0,
                     "confirmed_at": data.get("confirmed_at", ""),
                 })
             except Exception as e:

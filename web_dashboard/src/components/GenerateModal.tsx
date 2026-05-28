@@ -190,6 +190,13 @@ export default function GenerateModal({ open, mappingIds, onClose, onComplete, o
                     : 'All satisfied',
               },
               {
+                label: 'Relations',
+                passed: preflightResult.checks.relations?.passed ?? true,
+                detail: (preflightResult.checks.relations?.missing_targets?.length ?? 0) > 0
+                  ? `Missing targets: ${preflightResult.checks.relations!.missing_targets.map((r: any) => r.target_entity).join(', ')}`
+                  : 'All targets available',
+              },
+              {
                 label: 'Field Coverage',
                 passed: preflightResult.checks.field_coverage.passed,
                 detail: preflightResult.checks.field_coverage.unapproved?.length > 0

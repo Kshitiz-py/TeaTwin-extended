@@ -8,6 +8,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import sys
 import typing
 from datetime import datetime, timezone
@@ -25,6 +26,20 @@ from cmsd_schema.process_planning import ProcessPlan, Process
 from cmsd_schema.connection_entities import Connection
 from cmsd_schema.inventory_entities import InventoryItem
 from cmsd_schema.maintenance_entities import MaintenancePlan
+from cmsd_schema.entity_reference_definition import (
+    EntityReference,
+    PartTypeReference, PartReference,
+    ResourceClassReference, ResourceReference,
+    ProcessPlanReference, ProcessReference,
+    BillOfMaterialsReference, JobReference,
+    CalendarReference,
+    MaintenancePlanReference, InventoryItemClassReference,
+    OrderInformationReference,
+    SkillReference, SetupDefinitionReference, SetupChangeoverReference,
+    LayoutElementReference, ReferenceMaterialReference,
+    PropertyDescriptionReference, EventReference,
+)
+from cmsd_schema.part_entities import BillOfMaterialsComponentReference
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from shared.transform import execute_transformation
@@ -56,6 +71,26 @@ class MappingDrivenFactory:
         "Job": Job,
         "InventoryItem": InventoryItem,
         "MaintenancePlan": MaintenancePlan,
+    }
+
+    # Maps entity name → (ReferenceClass, identifier_field_name)
+    # Built by convention {Entity}Reference with {snake_entity}_identifier,
+    # with explicit overrides for non-standard names.
+    REFERENCE_REGISTRY: dict[str, tuple[type, str]] = {
+        "Resource": (ResourceReference, "resource_identifier"),
+        "ResourceClass": (ResourceClassReference, "resource_class_identifier"),
+        "PartType": (PartTypeReference, "part_type_identifier"),
+        "Part": (PartReference, "part_identifier"),
+        "BillOfMaterials": (BillOfMaterialsReference, "bill_of_materials_identifier"),
+        "BillOfMaterialsComponent": (BillOfMaterialsComponentReference, "bill_of_materials_component_identifier"),
+        "ProcessPlan": (ProcessPlanReference, "process_plan_identifier"),
+        "Process": (ProcessReference, "process_identifier"),
+        "Order": (OrderInformationReference, "order_identifier"),
+        "OrderLine": (OrderInformationReference, "order_line_identifier"),
+        "Calendar": (CalendarReference, "calendar_identifier"),
+        "Job": (JobReference, "job_identifier"),
+        "InventoryItem": (InventoryItemClassReference, "inventory_item_class_identifier"),
+        "MaintenancePlan": (MaintenancePlanReference, "maintenance_plan_identifier"),
     }
 
     _FIELD_TYPE_HINTS: dict[str, dict[str, type]] = {}
@@ -174,6 +209,10 @@ class MappingDrivenFactory:
             self._attach_to_document(doc, entity_type, instances)
             report["entities"][entity_type] = {"count": len(instances), "source": "mapping"}
 
+        # Post-processing: resolve cross-entity relations
+        relation_warnings = self._resolve_relations(doc, id_to_mapping, report)
+        report["field_warnings"].extend(relation_warnings)
+
         return doc, report
 
     def _build_entity(self, mapping: dict, raw_items: list[dict]) -> tuple[list, list]:
@@ -239,6 +278,8 @@ class MappingDrivenFactory:
             try:
                 instance = model_class(**kwargs)
                 instance._connection = conn_meta
+                # Save raw API item for later relation resolution
+                instance._raw_source = item
                 instances.append(instance)
             except Exception as e:
                 # Extract the specific field that failed from Pydantic errors
@@ -260,6 +301,274 @@ class MappingDrivenFactory:
                 })
 
         return instances, warnings
+
+    # ─── Relation Resolution (Issue 06) ──────────────────────────
+
+    def _resolve_relations(self, doc: CMSDDocument, id_to_mapping: dict,
+                           report: dict) -> list[dict]:
+        """Post-processing pass: resolve cross-entity relations for all entities
+        that have a 'relations' array in their mapping JSON."""
+        warnings: list[dict] = []
+        # Build lookup: entity_type → list of instances (from doc)
+        doc_index = self._index_document(doc)
+
+        for mid, mapping in id_to_mapping.items():
+            relations = mapping.get("relations", [])
+            if not relations:
+                continue
+
+            entity_type = mapping.get("cmsd_entity", "")
+            instances = doc_index.get(entity_type, [])
+            if not instances:
+                continue
+
+            for relation in relations:
+                target_entity = relation.get("target_entity", "")
+                target_mapping_id = relation.get("target_mapping_id", "")
+                cmsd_path = relation.get("cmsd_path", "")
+                match_key = relation.get("match_key", {})
+                source_api_path = match_key.get("source", {}).get("api_path", "")
+                target_field = match_key.get("target", {}).get("field", "identifier")
+                source_transform = match_key.get("source", {}).get("transform")
+
+                if not target_entity or not cmsd_path or not source_api_path:
+                    warnings.append({
+                        "entity_type": entity_type,
+                        "relation": f"{entity_type}→{target_entity}",
+                        "field": "(relation)",
+                        "api_path": "incomplete relation definition",
+                    })
+                    continue
+
+                # Get target instances
+                if target_mapping_id:
+                    # Look up target by mapping_id first
+                    target_instances = []
+                    for et, insts in doc_index.items():
+                        for inst in insts:
+                            conn = getattr(inst, '_connection', None)
+                            if conn and conn.get('mapping_id') == target_mapping_id:
+                                target_instances.append(inst)
+                    if not target_instances:
+                        # Fall back to entity-type lookup
+                        target_instances = doc_index.get(target_entity, [])
+                else:
+                    target_instances = doc_index.get(target_entity, [])
+
+                if not target_instances:
+                    warnings.append({
+                        "entity_type": entity_type,
+                        "relation": f"{entity_type}→{target_entity}",
+                        "field": target_mapping_id or target_entity,
+                        "api_path": f"target entity '{target_entity}' has no instances in document",
+                    })
+                    continue
+
+                # Build target lookup index
+                target_by_field: dict[str, Any] = {}
+                for t in target_instances:
+                    tv = getattr(t, target_field, None)
+                    if tv is not None:
+                        target_by_field[str(tv)] = t
+
+                for instance in instances:
+                    raw = getattr(instance, '_raw_source', None)
+                    if not raw:
+                        continue
+
+                    source_value = self._resolve_path(raw, source_api_path)
+                    if source_value is None:
+                        continue
+
+                    # Apply optional source transform
+                    lookup_value = str(source_value)
+                    if source_transform and isinstance(source_transform, dict):
+                        result = execute_transformation(lookup_value, source_transform)
+                        if result.get("success"):
+                            lookup_value = result["converted_value"]
+
+                    matched = target_by_field.get(lookup_value)
+                    if matched is None:
+                        warnings.append({
+                            "entity_type": entity_type,
+                            "instance_key": str(getattr(instance, 'identifier', '?')),
+                            "field": f"relation→{target_entity}",
+                            "api_path": f"no match for '{lookup_value}' in {target_entity}.{target_field}",
+                        })
+                        continue
+
+                    # Build the reference object
+                    reference = self._build_reference(target_entity, matched)
+                    if reference is None:
+                        warnings.append({
+                            "entity_type": entity_type,
+                            "instance_key": str(getattr(instance, 'identifier', '?')),
+                            "field": f"relation→{target_entity}",
+                            "api_path": f"cannot build reference for {target_entity}",
+                        })
+                        continue
+
+                    # Deep-set the reference at cmsd_path
+                    try:
+                        self._deep_set_reference(instance, cmsd_path, reference)
+                    except Exception as e:
+                        warnings.append({
+                            "entity_type": entity_type,
+                            "instance_key": str(getattr(instance, 'identifier', '?')),
+                            "field": cmsd_path,
+                            "api_path": str(e),
+                        })
+
+        return warnings
+
+    def _build_reference(self, target_entity: str, matched_instance: Any) -> Any | None:
+        """Build a CMSD Reference object pointing to the matched entity instance."""
+        entry = self.REFERENCE_REGISTRY.get(target_entity)
+        if not entry:
+            logger.warning(f"No reference class registered for entity: {target_entity}")
+            return None
+
+        ref_class, id_field = entry
+        target_identifier = getattr(matched_instance, 'identifier', None)
+        if target_identifier is None:
+            return None
+
+        kwargs: dict[str, Any] = {id_field: str(target_identifier)}
+
+        # For OrderLine references, we also need order_identifier
+        if target_entity == "OrderLine":
+            # The parent Order's identifier — walk up from the OrderLine
+            parent_order_id = getattr(matched_instance, 'order_identifier', None)
+            if not parent_order_id:
+                # If OrderLine is nested, try to find it
+                pass
+            kwargs["order_identifier"] = str(parent_order_id) if parent_order_id else ""
+
+        # For CalendarReference, default to calendar_identifier if nothing else set
+        if ref_class is CalendarReference:
+            kwargs.setdefault("calendar_identifier", str(target_identifier))
+
+        # For ProcessReference, at least one identifier is required
+        if ref_class is ProcessReference:
+            if "process_identifier" not in kwargs:
+                kwargs["process_identifier"] = str(target_identifier)
+
+        try:
+            return ref_class(**kwargs)
+        except Exception as e:
+            logger.warning(f"Failed to build {ref_class.__name__}: {e}")
+            return None
+
+    def _deep_set_reference(self, entity: Any, cmsd_path: str, reference: Any):
+        """Walk/create the cmsd_path on the entity and set the leaf to reference.
+        Handles list indices ([0]) and nested object attributes.
+
+        Example path: 'order_lines[0].part_description.part_type'
+        """
+        segments = self._parse_cmsd_path(cmsd_path)
+        cur: Any = entity
+
+        for i, seg in enumerate(segments):
+            is_last = (i == len(segments) - 1)
+            if seg["type"] == "attr":
+                if is_last:
+                    setattr(cur, seg["name"], reference)
+                else:
+                    existing = getattr(cur, seg["name"], None)
+                    if existing is None:
+                        # Need to create the intermediate object
+                        field_type = self._infer_field_type(type(cur).__name__, seg["name"])
+                        if field_type:
+                            try:
+                                existing = field_type()
+                            except Exception:
+                                existing = None
+                        if existing is None:
+                            raise ValueError(
+                                f"Cannot create intermediate object for {seg['name']} "
+                                f"on {type(cur).__name__}"
+                            )
+                        setattr(cur, seg["name"], existing)
+                    cur = existing
+            elif seg["type"] == "list":
+                idx = seg["index"]
+                lst = getattr(cur, seg["name"], None)
+                if lst is None or not isinstance(lst, list):
+                    lst = []
+                    setattr(cur, seg["name"], lst)
+                # Ensure list is long enough
+                while len(lst) <= idx:
+                    # Create default item for missing list entries
+                    item_type = self._infer_list_item_type(type(cur).__name__, seg["name"])
+                    if item_type:
+                        try:
+                            lst.append(item_type())
+                        except Exception:
+                            lst.append(None)
+                    else:
+                        lst.append(None)
+                if is_last:
+                    lst[idx] = reference
+                else:
+                    cur = lst[idx]
+                    if cur is None:
+                        raise ValueError(
+                            f"List item {seg['name']}[{idx}] is None, "
+                            f"cannot traverse deeper into path"
+                        )
+
+    def _parse_cmsd_path(self, cmsd_path: str) -> list[dict]:
+        """Parse a CMSD path like 'order_lines[0].part_description.part_type'
+        into structured segments."""
+        segments: list[dict] = []
+        parts = cmsd_path.split(".")
+        for part in parts:
+            m = re.match(r'^(\w+)\[(\d+)\]$', part)
+            if m:
+                segments.append({"type": "list", "name": m.group(1), "index": int(m.group(2))})
+            else:
+                segments.append({"type": "attr", "name": part})
+        return segments
+
+    def _infer_field_type(self, entity_name: str, field_name: str) -> type | None:
+        """Look up the Pydantic type of a field on an entity."""
+        hints = self._FIELD_TYPE_HINTS.get(entity_name, {})
+        return hints.get(field_name)
+
+    def _infer_list_item_type(self, entity_name: str, field_name: str) -> type | None:
+        """Get the item type of a List[...] field."""
+        hints = self._FIELD_TYPE_HINTS.get(entity_name, {})
+        field_type = hints.get(field_name)
+        if field_type is None:
+            return None
+        origin = typing.get_origin(field_type)
+        if origin is list:
+            args = typing.get_args(field_type)
+            if args:
+                return self._unwrap_optional(args[0])
+        return None
+
+    def _index_document(self, doc: CMSDDocument) -> dict[str, list]:
+        """Index all entity instances in the document by entity type."""
+        index: dict[str, list] = {}
+        attr_map = {
+            "Resource": "resources", "ResourceClass": "resource_classes",
+            "PartType": "part_types", "Part": "parts",
+            "BillOfMaterials": "bills_of_materials",
+            "BillOfMaterialsComponent": "bills_of_materials_components",
+            "ProcessPlan": "process_plans", "Process": "processes",
+            "Order": "orders", "OrderLine": "order_lines",
+            "Calendar": "calendars", "Shift": "shifts",
+            "Break": "breaks", "Holiday": "holidays",
+            "Connection": "connections", "Job": "jobs",
+            "InventoryItem": "inventory_items",
+            "MaintenancePlan": "maintenance_plans",
+        }
+        for entity_type, attr_name in attr_map.items():
+            instances = getattr(doc, attr_name, None)
+            if instances:
+                index[entity_type] = instances
+        return index
 
     def _resolve_path(self, obj: Any, path: str) -> Any:
         """Follow a dot-notation path into a dict (instance-relative).

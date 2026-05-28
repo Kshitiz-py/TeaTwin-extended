@@ -124,6 +124,7 @@ export interface MappingSummary {
   field_count: number;
   approved_count: number;
   flagged_count: number;
+  relation_count?: number;
   confirmed_at: string;
 }
 

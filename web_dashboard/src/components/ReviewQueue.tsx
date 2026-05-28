@@ -23,7 +23,7 @@ export default function ReviewQueue({ embedded = false, onGenerate, onEdit, onNa
   const [preflightResult, setPreflightResult] = useState<PreflightResult | null>(null);
   const [showDepsPrompt, setShowDepsPrompt] = useState(false);
   const [depsPromptInfo, setDepsPromptInfo] = useState<{
-    missing: Array<{ for_mapping: string; for_entity: string; needs: string; needs_entity: string }>;
+    missing: Array<{ for_mapping: string; for_entity: string; needs: string; needs_entity: string; is_relation?: boolean; relation_path?: string }>;
     autoSelectIds: string[];
   } | null>(null);
 
@@ -89,13 +89,31 @@ export default function ReviewQueue({ embedded = false, onGenerate, onEdit, onNa
       const result = await api.validatePreflight(ids);
       setPreflightResult(result);
 
-      if (!result.checks.dependencies.passed) {
-        // Show dependency auto-select prompt
-        const autoSelectIds = result.checks.dependencies.auto_selected || [];
-        const missing = result.checks.dependencies.missing || [];
+      if (!result.checks.dependencies.passed || !result.checks.relations?.passed) {
+        // Show dependency auto-select prompt (includes relation missing targets)
+        const autoSelectIds = result.checks.dependencies?.auto_selected || [];
+        const missingDeps = result.checks.dependencies?.missing || [];
+        const missingRels = result.checks.relations?.missing_targets || [];
+        // Convert relation issues to match dependency prompt format
+        const allMissing = [
+          ...missingDeps,
+          ...missingRels.map(r => ({
+            for_mapping: r.for_mapping,
+            for_entity: r.for_entity,
+            needs: r.target_mapping_id,
+            needs_entity: r.target_entity,
+            is_relation: true,
+            relation_path: r.relation_path,
+          })),
+        ];
+        const allAutoSelect = [...new Set([
+          ...autoSelectIds,
+          ...missingDeps.map((m: any) => m.needs),
+          ...missingRels.map((r: any) => r.target_mapping_id).filter(Boolean),
+        ])];
         setDepsPromptInfo({
-          missing,
-          autoSelectIds: [...new Set([...autoSelectIds, ...missing.map(m => m.needs)])],
+          missing: allMissing as any,
+          autoSelectIds: allAutoSelect as any,
         });
         setShowDepsPrompt(true);
         setPreflightLoading(false);
@@ -271,6 +289,15 @@ export default function ReviewQueue({ embedded = false, onGenerate, onEdit, onNa
                         }}>
                           {m.cmsd_entity}
                         </span>
+                        {(m.relation_count ?? 0) > 0 && (
+                          <span style={{
+                            padding: '2px 8px', borderRadius: '12px',
+                            background: '#312e81', color: '#a5b4fc',
+                            fontSize: '11px', fontWeight: 600, marginLeft: '6px',
+                          }}>
+                            🔗 {m.relation_count}
+                          </span>
+                        )}
                       </td>
                       <td style={{ padding: '10px 14px', color: '#94a3b8', fontSize: '12px', fontFamily: 'monospace' }}>
                         {m.source?.endpoint || '—'}
@@ -362,15 +389,33 @@ export default function ReviewQueue({ embedded = false, onGenerate, onEdit, onNa
               Missing Dependencies
             </h3>
             <div style={{ color: '#94a3b8', fontSize: '13px', marginBottom: '16px' }}>
-              {depsPromptInfo.missing.map((m, i) => {
+              {depsPromptInfo.missing.map((m: any, i: number) => {
                 const forMapping = mappings.find(mp => mp.id === m.for_mapping);
                 const needsMapping = mappings.find(mp => mp.id === m.needs);
+                const isRelation = m.is_relation;
                 return (
-                  <div key={i} style={{ marginBottom: '8px' }}>
-                    <strong style={{ color: '#f1f5f9' }}>"{forMapping?.data_point || m.for_entity}"</strong>
-                    {' '}({m.for_entity}) depends on{' '}
-                    <strong style={{ color: '#f1f5f9' }}>"{needsMapping?.data_point || m.needs_entity}"</strong>
-                    {' '}({m.needs_entity})
+                  <div key={i} style={{
+                    marginBottom: '8px', padding: '8px 10px', borderRadius: '6px',
+                    background: isRelation ? '#1e1b4b' : 'transparent',
+                    border: isRelation ? '1px solid #3730a3' : 'none',
+                  }}>
+                    {isRelation ? (
+                      <>
+                        <span style={{ fontSize: '10px', color: '#818cf8', fontWeight: 600, textTransform: 'uppercase' }}>Relation</span>
+                        <br />
+                        <strong style={{ color: '#f1f5f9' }}>"{forMapping?.data_point || m.for_entity}"</strong>
+                        {' '}({m.for_entity}) references{' '}
+                        <strong style={{ color: '#f1f5f9' }}>{m.needs_entity}</strong>
+                        {' '}via <code style={{ color: '#c7d2fe', fontSize: '10px' }}>{m.relation_path}</code>
+                      </>
+                    ) : (
+                      <>
+                        <strong style={{ color: '#f1f5f9' }}>"{forMapping?.data_point || m.for_entity}"</strong>
+                        {' '}({m.for_entity}) depends on{' '}
+                        <strong style={{ color: '#f1f5f9' }}>"{needsMapping?.data_point || m.needs_entity}"</strong>
+                        {' '}({m.needs_entity})
+                      </>
+                    )}
                     {needsMapping ? (
                       <span style={{ color: '#6ee7b7', fontSize: '11px', marginLeft: '6px' }}>— exists, not selected</span>
                     ) : (

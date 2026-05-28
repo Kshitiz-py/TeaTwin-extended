@@ -187,11 +187,15 @@ class CMSDOrchestrator:
 
             elapsed_ms = int((datetime.now(timezone.utc) - t_start).total_seconds() * 1000)
 
+            preflight_result = {"passed": True, "warnings": []}
+            if mapping_ids:
+                preflight_result = self.run_preflight(mapping_ids)
+
             return {
                 "success": len(report.get("fetch_errors", [])) == 0,
                 "refreshed_at": self._last_refreshed.isoformat(),
                 "phases": {
-                    "preflight": {"passed": True, "warnings": []},
+                    "preflight": preflight_result,
                     "topological_order": report.get("topological_order", []),
                     "generation": report.get("entities", {}),
                     "merge": {
@@ -213,12 +217,13 @@ class CMSDOrchestrator:
     # ── Pre-flight validation (Slice 5.3) ──────────────────
 
     def run_preflight(self, mapping_ids: list[str]) -> dict:
-        """Validate readiness before generation. Stub — full impl in Slice 5.3."""
+        """Validate readiness before generation: dependencies, relations, fields."""
         if not self._registry:
             return {
                 "passed": True,
                 "checks": {
                     "dependencies": {"passed": True, "auto_selected": [], "missing": []},
+                    "relations": {"passed": True, "missing_targets": []},
                     "field_coverage": {"passed": True, "unapproved": []},
                     "api_reachability": {"passed": True, "unreachable": []},
                 },
@@ -241,6 +246,39 @@ class CMSDOrchestrator:
                     "needs_entity": dep_mapping.get("cmsd_entity", ""),
                 })
 
+        # Issue 06: Check relation targets exist
+        relation_missing = []
+        for mid in expanded:
+            mapping = self._registry._mappings.get(mid, {})
+            for relation in mapping.get("relations", []):
+                target_id = relation.get("target_mapping_id", "")
+                target_entity = relation.get("target_entity", "")
+                cmsd_path = relation.get("cmsd_path", "")
+                if target_id and target_id not in self._registry._mappings:
+                    relation_missing.append({
+                        "for_mapping": mid,
+                        "for_entity": mapping.get("cmsd_entity", ""),
+                        "relation_path": cmsd_path,
+                        "target_mapping_id": target_id,
+                        "target_entity": target_entity,
+                        "resolved": False,
+                    })
+                elif not target_id and target_entity:
+                    # Check if any mapping produces this entity type
+                    found = any(
+                        m.get("cmsd_entity") == target_entity
+                        for m in self._registry._mappings.values()
+                    )
+                    if not found:
+                        relation_missing.append({
+                            "for_mapping": mid,
+                            "for_entity": mapping.get("cmsd_entity", ""),
+                            "relation_path": cmsd_path,
+                            "target_mapping_id": "(any)",
+                            "target_entity": target_entity,
+                            "resolved": False,
+                        })
+
         unapproved = []
         for mid in expanded:
             mapping = self._registry._mappings.get(mid, {})
@@ -255,12 +293,16 @@ class CMSDOrchestrator:
                     })
 
         return {
-            "passed": len(missing_deps) == 0 and len(unapproved) == 0,
+            "passed": len(missing_deps) == 0 and len(unapproved) == 0 and len(relation_missing) == 0,
             "checks": {
                 "dependencies": {
                     "passed": len(missing_deps) == 0,
                     "auto_selected": auto_selected,
                     "missing": missing_deps,
+                },
+                "relations": {
+                    "passed": len(relation_missing) == 0,
+                    "missing_targets": relation_missing,
                 },
                 "field_coverage": {
                     "passed": len(unapproved) == 0,

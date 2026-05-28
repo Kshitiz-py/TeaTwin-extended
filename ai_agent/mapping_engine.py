@@ -449,7 +449,13 @@ class MappingEngine:
             "Do NOT transform values. Do NOT invent conversions. "
             "A numeric value like 360000 must stay '360000', never become 'PT100H'.\n"
             "7. Identify the array of entity instances in the payload: find the JSONPath to the array "
-            "(e.g., $.resources[*]) and the field used as unique identifier within each item.\n\n"
+            "(e.g., $.resources[*]) and the field used as unique identifier within each item.\n"
+            "8. CROSS-ENTITY RELATIONS: If you detect fields in the API payload that appear to reference "
+            "OTHER CMSD entities (e.g., 'part_type_id' likely references PartType, 'resource_id' likely "
+            "references Resource, 'bom_id' likely references BillOfMaterials), propose a 'relations' array. "
+            "Use the RAG context to determine the correct CMSD nested path (cmsd_path) where the reference "
+            "lives in the target entity model. Only propose relations where you are reasonably confident "
+            "(confidence 'high' or 'medium'). If no cross-entity references are detected, omit relations.\n\n"
             "Output format: JSON with this structure:\n"
             '{\n'
             '  "data_point": "string",\n'
@@ -471,6 +477,17 @@ class MappingEngine:
             '    "count_path": "JSONPath to the array of instances (e.g. $.machines[*])",\n'
             '    "key_field": "field name used as unique identifier within each array item"\n'
             '  },\n'
+            '  "relations": [\n'
+            '    {\n'
+            '      "cmsd_path": "nested.path.to.reference.field",\n'
+            '      "target_entity": "EntityName",\n'
+            '      "match_key": {\n'
+            '        "source": { "api_path": "field.in.this.payload" },\n'
+            '        "target": { "field": "identifier" }\n'
+            '      },\n'
+            '      "confidence": "high|medium"\n'
+            '    }\n'
+            '  ],\n'
             '  "notes": "any observations about the mapping"\n'
             '}\n\n'
             "IMPORTANT: Output ONLY the JSON object. No markdown, no explanation."
@@ -495,7 +512,11 @@ class MappingEngine:
             "A numeric value like 360000 must stay '360000', never become 'PT100H'.\n"
             "8. In 'notes', mention which endpoint each field came from if relevant.\n"
             "9. Identify the array of entity instances across payloads: find the JSONPath to the array "
-            "(e.g., $.resources[*]) and the field used as unique identifier within each item.\n\n"
+            "(e.g., $.resources[*]) and the field used as unique identifier within each item.\n"
+            "10. CROSS-ENTITY RELATIONS: If you detect fields across ANY payload that appear to reference "
+            "OTHER CMSD entities (e.g., 'part_type_id' likely references PartType, 'resource_id' likely "
+            "references Resource), propose a 'relations' array. Use the RAG context to determine the correct "
+            "CMSD nested path (cmsd_path). Only propose where confidence is 'high' or 'medium'.\n\n"
             "Output format: JSON with this structure:\n"
             '{\n'
             '  "data_point": "string",\n'
@@ -518,6 +539,17 @@ class MappingEngine:
             '    "count_path": "JSONPath to the array of instances (e.g. $.machines[*])",\n'
             '    "key_field": "field name used as unique identifier within each array item"\n'
             '  },\n'
+            '  "relations": [\n'
+            '    {\n'
+            '      "cmsd_path": "nested.path.to.reference.field",\n'
+            '      "target_entity": "EntityName",\n'
+            '      "match_key": {\n'
+            '        "source": { "api_path": "field.in.payload" },\n'
+            '        "target": { "field": "identifier" }\n'
+            '      },\n'
+            '      "confidence": "high|medium"\n'
+            '    }\n'
+            '  ],\n'
             '  "notes": "any observations about the mapping"\n'
             '}\n\n'
             "IMPORTANT: Output ONLY the JSON object. No markdown, no explanation."
@@ -587,6 +619,26 @@ class MappingEngine:
             "key_field": instances_raw.get("key_field", "") if isinstance(instances_raw, dict) else "",
         }
 
+        # Validate and preserve relations from LLM response (Issue 06)
+        relations_raw = proposed.get("relations", [])
+        validated_relations: list[dict] = []
+        if isinstance(relations_raw, list):
+            for rel in relations_raw:
+                if isinstance(rel, dict) and rel.get("cmsd_path") and rel.get("target_entity"):
+                    validated_relations.append({
+                        "cmsd_path": rel.get("cmsd_path", ""),
+                        "target_entity": rel.get("target_entity", ""),
+                        "match_key": {
+                            "source": {
+                                "api_path": rel.get("match_key", {}).get("source", {}).get("api_path", ""),
+                            },
+                            "target": {
+                                "field": rel.get("match_key", {}).get("target", {}).get("field", "identifier"),
+                            },
+                        },
+                        "confidence": rel.get("confidence", "medium"),
+                    })
+
         validated = {
             "data_point": proposed.get("data_point", ""),
             "cmsd_entity": cmsd_entity,
@@ -595,6 +647,7 @@ class MappingEngine:
             "mapping": {},
             "unmapped_fields": [],
             "instances": instances,
+            "relations": validated_relations,
             "notes": proposed.get("notes", ""),
             "requires_manual_review": False,
         }

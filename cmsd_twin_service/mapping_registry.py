@@ -40,11 +40,24 @@ class MappingRegistry:
     def _infer_dependencies(self, mapping: dict) -> set[str]:
         """
         Hybrid dependency inference:
+        0. Read 'relations' array — each relation's target_mapping_id is a dependency
         1. Check explicit 'depends_on' in mapping JSON
         2. Introspect CMSD model field types for entity references
         3. Apply naming conventions ({entity}_id -> {Entity})
         """
         deps = set()
+
+        # 0. Relations (Issue 06) — strongest signal, user-authored
+        from .mapping_factory import MappingDrivenFactory
+        for relation in mapping.get("relations", []):
+            target_mapping_id = relation.get("target_mapping_id", "")
+            if target_mapping_id and target_mapping_id != mapping.get("_id"):
+                deps.add(target_mapping_id)
+            elif relation.get("target_entity"):
+                # Fall back to entity-type lookup
+                ref_mapping_id = self._entity_to_mapping.get(relation["target_entity"])
+                if ref_mapping_id and ref_mapping_id != mapping.get("_id"):
+                    deps.add(ref_mapping_id)
 
         # 1. Explicit dependencies
         explicit = mapping.get("depends_on", [])
@@ -52,7 +65,6 @@ class MappingRegistry:
             deps.update(explicit)
 
         # 2. Schema introspection (from factory's ENTITY_REGISTRY + field hints)
-        from .mapping_factory import MappingDrivenFactory
         entity_type = mapping.get("cmsd_entity", "")
         field_hints = MappingDrivenFactory._FIELD_TYPE_HINTS.get(entity_type, {})
 

@@ -23,10 +23,31 @@ export interface RefreshReport {
   elapsed_ms: number;
 }
 
+export interface RelationDefinition {
+  cmsd_path: string;
+  target_entity: string;
+  target_mapping_id?: string;
+  match_key: {
+    source: { api_path: string; transform?: any };
+    target: { field: string };
+  };
+  confidence?: string;
+}
+
+export interface PreflightRelationIssue {
+  for_mapping: string;
+  for_entity: string;
+  relation_path: string;
+  target_mapping_id: string;
+  target_entity: string;
+  resolved: boolean;
+}
+
 export interface PreflightResult {
   passed: boolean;
   checks: {
     dependencies: { passed: boolean; auto_selected: string[]; missing: any[] };
+    relations: { passed: boolean; missing_targets: PreflightRelationIssue[] };
     field_coverage: { passed: boolean; unapproved: any[] };
     api_reachability: { passed: boolean; unreachable: any[] };
   };

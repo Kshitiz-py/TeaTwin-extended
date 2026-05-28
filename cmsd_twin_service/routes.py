@@ -230,7 +230,9 @@ async def validate_preflight(body: dict):
 
         preflight["passed"] = (
             preflight["checks"]["dependencies"]["passed"] and
-            preflight["checks"]["field_coverage"]["passed"]
+            preflight["checks"]["relations"]["passed"] and
+            preflight["checks"]["field_coverage"]["passed"] and
+            preflight["checks"]["api_reachability"]["passed"]
         )
 
     return preflight
