@@ -7,15 +7,18 @@ Enhanced with multi-endpoint support, raw payload display, and smart reanalysis.
 import asyncio
 import json
 import logging
-from typing import Any
+import os
+import traceback
+from typing import Any, AsyncGenerator
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from .connection_manager import connection_manager
 from .rag.vector_store import vector_store
 from .rag.document_loader import document_loader
-from .mapping_engine import mapping_engine
+from .mapping_engine import mapping_engine, TRANSFORMATION_PRESETS
 from .api_explorer import api_explorer
 from .llm import llm_client, PROVIDER_PRESETS
 
@@ -179,9 +182,10 @@ async def agent_status():
 @router.post("/agent/connect")
 async def connect_agent(config: MultiProviderConfig):
     """Configure the LLM provider and test the connection.
-    
+
     Accepts provider configuration. API keys are stored **in memory only**
     — never persisted to disk.
+    Supports separate embedding provider via config.embed.
     """
     llm_client.configure(
         api_style=config.chat.provider_type,
@@ -191,14 +195,31 @@ async def connect_agent(config: MultiProviderConfig):
         embed_model=config.chat.embed_model,
     )
 
+    # Configure separate embedding provider if provided
+    if config.embed and config.embed.host:
+        logger.info(f"Configuring embed provider: type={config.embed.provider_type}, host={config.embed.host}, model={config.embed.embed_model}")
+        llm_client.configure_embed(
+            api_style=config.embed.provider_type,
+            host=config.embed.host,
+            api_key=config.embed.api_key or "",
+            embed_model=config.embed.embed_model,
+        )
+    elif config.embed:
+        logger.warning(f"Embed config provided but host is empty — skipping")
+
     test_result = llm_client.test_connection()
-    
+
+    # Also test embed provider if separate
+    if config.embed:
+        embed_test = llm_client.test_embed_connection()
+        test_result["embed"] = embed_test
+
     return {
         "configured": True,
         "provider": config.chat.provider_type,
         "host": config.chat.host,
         "chat_model": config.chat.chat_model,
-        "embed_model": config.chat.embed_model,
+        "embed_model": (config.embed.embed_model if config.embed else config.chat.embed_model),
         "connection_test": test_result,
     }
 
@@ -395,6 +416,134 @@ async def analyze_mapping(request: MappingAnalyzeRequest):
         logger.error(f"Mapping analysis failed: {e}")
         raise HTTPException(500, f"Mapping analysis failed: {e}")
 
+
+def _sse_event(event: str, data: dict) -> str:
+    """Format a Server-Sent Event."""
+    return f"event: {event}\ndata: {json.dumps(data, default=str)}\n\n"
+
+
+@router.post("/mapping/analyze-stream")
+async def analyze_mapping_stream(request: MappingAnalyzeRequest):
+    """
+    Propose field mapping with real-time progress via Server-Sent Events.
+    Returns SSE stream with events: step (progress) and result (final mapping).
+    """
+    async def event_stream() -> AsyncGenerator[str, None]:
+        try:
+            # Phase 1: Parse payloads
+            yield _sse_event("step", {"phase": "payloads", "status": "running", "label": "Parsing API payloads..."})
+            await asyncio.sleep(0.05)  # flush SSE so frontend renders the phase
+
+            payload_analyses: list[dict] = []
+            all_endpoints_str: list[str] = []
+
+            if request.approved_payloads:
+                for ap in request.approved_payloads:
+                    if ap.raw_payload is None:
+                        continue
+                    analysis = api_explorer.analyze_payload(ap.raw_payload)
+                    payload_analyses.append({
+                        "endpoint": ap.endpoint,
+                        "source_label": ap.label or ap.endpoint,
+                        "analysis": analysis,
+                        "raw_payload": ap.raw_payload,
+                    })
+                    all_endpoints_str.append(f"{ap.source_id}{ap.endpoint}")
+            else:
+                endpoints_to_fetch = []
+                if request.endpoints:
+                    for ep in request.endpoints:
+                        endpoints_to_fetch.append({
+                            "source_id": ep.source_id, "endpoint": ep.endpoint,
+                            "method": ep.method, "label": ep.label or ep.endpoint,
+                        })
+                elif request.source_id and request.api_endpoint:
+                    endpoints_to_fetch.append({
+                        "source_id": request.source_id, "endpoint": request.api_endpoint,
+                        "method": request.method, "label": request.api_endpoint,
+                    })
+
+                if not endpoints_to_fetch:
+                    yield _sse_event("error", {"message": "No endpoints or approved_payloads specified"})
+                    return
+
+                for ep in endpoints_to_fetch:
+                    result = await api_explorer.fetch_payload(ep["source_id"], ep["endpoint"], ep.get("method", "GET"))
+                    analysis = api_explorer.analyze_payload(result["payload"])
+                    payload_analyses.append({
+                        "endpoint": ep["endpoint"], "source_label": ep.get("label", ep["endpoint"]),
+                        "analysis": analysis, "raw_payload": result["payload"],
+                    })
+                    all_endpoints_str.append(ep["endpoint"])
+
+            if not payload_analyses:
+                yield _sse_event("error", {"message": "No valid payloads to analyze"})
+                return
+
+            raw_fields = 0
+            for pa in payload_analyses:
+                flat = api_explorer.extract_field_paths(pa.get("analysis", {}))
+                raw_fields += len(flat)
+            yield _sse_event("step", {"phase": "payloads", "status": "done",
+                                       "detail": f"Found {raw_fields} unique field paths in API response"})
+
+            # Phase 2: RAG retrieval
+            yield _sse_event("step", {"phase": "rag", "status": "running", "label": "Retrieving RAG context..."})
+            await asyncio.sleep(0.05)  # flush so frontend shows RAG phase before work starts
+
+            rag_context = await mapping_engine.analyze_rag(
+                data_point_name=request.data_point_name,
+                cmsd_entity=request.cmsd_entity,
+                api_endpoint=", ".join(all_endpoints_str),
+            )
+
+            yield _sse_event("step", {"phase": "rag", "status": "done",
+                                       "detail": f"Retrieved schema context for {request.cmsd_entity}"})
+
+            # Phase 3: LLM analysis
+            yield _sse_event("step", {"phase": "llm", "status": "running",
+                                       "label": "Analyzing with LLM...",
+                                       "detail": f"Sending {raw_fields} API fields to LLM for {request.cmsd_entity} mapping"})
+            await asyncio.sleep(0.05)  # flush so frontend shows LLM phase before the (slow) LLM call
+
+            if len(payload_analyses) == 1:
+                mapping = await mapping_engine.propose_mapping(
+                    data_point_name=request.data_point_name,
+                    cmsd_entity=request.cmsd_entity,
+                    api_endpoint=all_endpoints_str[0],
+                    payload_analysis=payload_analyses[0]["analysis"],
+                    rag_context=rag_context,
+                )
+            else:
+                endpoint_labels = [pa["source_label"] for pa in payload_analyses]
+                mapping = await mapping_engine.propose_mapping_multi(
+                    data_point_name=request.data_point_name,
+                    cmsd_entity=request.cmsd_entity,
+                    endpoint_labels=endpoint_labels,
+                    payload_analyses=payload_analyses,
+                    rag_context=rag_context,
+                )
+
+            yield _sse_event("step", {"phase": "llm", "status": "done",
+                                       "detail": f"{len(mapping.get('mapping', {}))} fields proposed"})
+
+            # Phase 4: Done
+            field_count = len(mapping.get("mapping", {}))
+            yield _sse_event("result", {
+                "success": True,
+                "cmsd_entity": request.cmsd_entity,
+                "mapping": mapping,
+                "proposed_mapping": mapping,
+                "rag_context": rag_context,
+            })
+
+        except Exception as e:
+            logger.error(f"Streaming analysis failed: {e}\n{traceback.format_exc()}")
+            yield _sse_event("error", {"message": str(e)})
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
 @router.post("/mapping/chat")
 async def chat_mapping(request: MappingChatRequest):
     """Chat with the AI agent about a specific mapping."""
@@ -407,6 +556,58 @@ async def chat_mapping(request: MappingChatRequest):
         return {"success": True, "response": response}
     except Exception as e:
         raise HTTPException(500, f"Chat failed: {e}")
+
+class ReviewReanalyzeRequest(BaseModel):
+    current_mapping: dict[str, Any]
+    flagged_fields: list[dict[str, str]] = []
+    data_point_name: str = ""
+    cmsd_entity: str = ""
+    approved_payloads: list[ApprovedPayload] = []
+
+
+@router.post("/mapping/review-reanalyze")
+async def review_reanalyze(request: ReviewReanalyzeRequest):
+    """
+    Targeted reanalysis: only refine fields the user has flagged with comments.
+    Approved/pending fields are preserved untouched.
+    """
+    try:
+        payload_analyses = []
+        for ap in request.approved_payloads:
+            if ap.raw_payload is None:
+                continue
+            analysis = api_explorer.analyze_payload(ap.raw_payload)
+            payload_analyses.append({
+                "endpoint": ap.endpoint,
+                "source_label": ap.label or ap.endpoint,
+                "analysis": analysis,
+                "raw_payload": ap.raw_payload,
+            })
+
+        rag_context = await mapping_engine.analyze_rag(
+            data_point_name=request.data_point_name,
+            cmsd_entity=request.cmsd_entity,
+        )
+
+        refined = await mapping_engine.review_reanalyze(
+            data_point_name=request.data_point_name,
+            cmsd_entity=request.cmsd_entity,
+            current_mapping=request.current_mapping,
+            flagged_fields=request.flagged_fields,
+            payload_analyses=payload_analyses if payload_analyses else None,
+            rag_context=rag_context,
+        )
+
+        changed_fields = [f["field"] for f in request.flagged_fields]
+        return {
+            "success": True,
+            "refined_mapping": refined,
+            "changed_fields": changed_fields,
+        }
+    except Exception as e:
+        logger.error(f"Review reanalyze failed: {e}")
+        raise HTTPException(500, f"Review reanalyze failed: {e}")
+
 
 @router.post("/mapping/edit")
 async def edit_mapping(request: MappingEditsRequest):
@@ -463,6 +664,41 @@ async def smart_reanalyze(request: SmartReanalyzeRequest):
     except Exception as e:
         logger.error(f"Smart reanalyze failed: {e}")
         raise HTTPException(500, f"Smart reanalyze failed: {e}")
+
+
+@router.post("/mapping/validate-types")
+async def validate_mapping_types(request: dict):
+    """Validate all fields in a mapping against CMSD type hints.
+    Returns per-field pass/fail with deterministic fix suggestions."""
+    import sys, os
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+    from shared.coerce import validate_mapping_types as _validate
+
+    mapping = request.get("mapping", {})
+    entity_type = request.get("cmsd_entity", mapping.get("cmsd_entity", "Resource"))
+    result = _validate(mapping, entity_type)
+    return {"success": True, **result}
+
+
+@router.get("/mapping/transformations")
+async def get_transformations():
+    """Return available transformation presets for the frontend."""
+    return {"transformations": TRANSFORMATION_PRESETS}
+
+
+class ApplyTransformationRequest(BaseModel):
+    raw_value: Any  # Accept any type — LLM may output numbers; coerced to str in handler
+    transformation: dict[str, Any] | None = None
+
+
+@router.post("/mapping/apply-transformation")
+async def apply_transformation(request: ApplyTransformationRequest):
+    """Execute a deterministic transformation on a raw value. No LLM involved."""
+    import sys, os
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+    from shared.transform import execute_transformation
+    raw_str = str(request.raw_value) if request.raw_value is not None else ""
+    return execute_transformation(raw_str, request.transformation)
 
 
 @router.post("/mapping/fetch")
@@ -541,46 +777,128 @@ _generation_branch: str = "feature/agentic-rag"
 
 
 def _mappings_dir() -> str:
-    import os
     d = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".agent-mappings")
     os.makedirs(d, exist_ok=True)
     return d
 
 
+def _normalize_api_paths(mapping: dict) -> dict:
+    """
+    Strip the count_path array prefix from every api_path so all paths
+    are instance-relative. Called before saving a confirmed mapping.
+    Handles patterns like:
+      resources.identifier   → identifier
+      resources[*].identifier → identifier
+      resources.0.identifier  → identifier
+    """
+    import re
+    count_path = mapping.get("instances", {}).get("count_path", "")
+    if not count_path:
+        return mapping
+
+    cleaned = count_path.replace("$.", "").replace("[*]", "")
+    prefix_parts = [p for p in cleaned.split(".") if p]
+    if not prefix_parts:
+        return mapping
+
+    prefix = prefix_parts[0]  # e.g. "resources"
+    # Build patterns to strip: "resources.", "resources[*].", "resources.0."
+    strip_pattern = re.compile(
+        r'^' + re.escape(prefix) + r'(?:\[[*]\]|\d+)?\.'
+    )
+
+    field_mappings = mapping.get("mapping", {})
+    for cmsd_field, field_info in field_mappings.items():
+        if not isinstance(field_info, dict):
+            continue
+        api_path = field_info.get("api_path", "")
+        if not api_path:
+            continue
+
+        # Strip the array prefix
+        normalized = strip_pattern.sub('', api_path, count=1)
+        if normalized and normalized != api_path:
+            field_info["api_path"] = normalized
+
+    return mapping
+
+
 @router.put("/mapping/{mapping_id}/confirm")
 async def confirm_mapping(mapping_id: str, request: dict):
     """
-    Confirm a mapping → add to the batch queue (NO code generation yet).
-    The user can add multiple mappings before triggering generation.
+    Confirm a mapping → save to .agent-mappings/ with resolved source config.
+    Bakes the source URL + auth into the mapping so the runtime factory can fetch APIs.
+    Normalizes api_path values to be instance-relative.
     """
     import time
+    from datetime import datetime, timezone
 
-    mapping_data = {
-        "mapping_id": mapping_id,
-        "confirmed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "mapping": request.get("mapping", {}),
-        "cmsd_schema_context": request.get("cmsd_schema_context", ""),
-        "data_point": request.get("mapping", {}).get("data_point", request.get("mapping", {}).get("data_point_name", "unknown")),
-        "cmsd_entity": request.get("mapping", {}).get("cmsd_entity", "unknown"),
+    mapping = request.get("mapping", {})
+    approved_payloads = request.get("approved_payloads", [])
+
+    # Resolve source_id from approved payloads or mapping
+    source_id = mapping.get("source_id", "")
+    if not source_id and approved_payloads:
+        source_id = approved_payloads[0].get("source_id", "")
+
+    # Resolve source config from connection manager
+    source = {}
+    if source_id:
+        source = connection_manager.get_source(source_id) or {}
+
+    # Bake source block into mapping (use resolved base_url)
+    # Use the endpoint from approved_payloads (it's the actual API path like /resources)
+    endpoint = ""
+    if approved_payloads:
+        endpoint = approved_payloads[0].get("endpoint", "")
+    if not endpoint:
+        endpoint = mapping.get("endpoint", mapping.get("api_endpoint", ""))
+    mapping["source"] = {
+        "base_url": source.get("base_url", ""),
+        "endpoint": endpoint,
+        "method": mapping.get("method", "GET"),
+        "auth": source.get("auth", {"type": "none"}),
     }
 
-    # Save to disk (persistent)
-    timestamp = time.strftime("%Y%m%d_%H%M%S")
-    filename = f"{mapping_id}_{timestamp}.json"
-    filepath = os.path.join(_mappings_dir(), filename)
+    # Store endpoint/payload info for edit restoration
+    mapping["endpoints"] = approved_payloads
+
+    # Normalize api_paths (strip count_path array prefix)
+    mapping = _normalize_api_paths(mapping)
+
+    # Stamp all fields as approved (they were approved to reach confirm)
+    field_map = mapping.get("mapping", {})
+    for field_name, field_info in field_map.items():
+        if isinstance(field_info, dict) and not field_info.get("status"):
+            field_info["status"] = "approved"
+
+    # Save to disk (persistent) — use clean filename: {mapping_id}.json
+    filepath = os.path.join(_mappings_dir(), f"{mapping_id}.json")
+    mapping["confirmed_at"] = datetime.now(timezone.utc).isoformat()
     with open(filepath, "w", encoding="utf-8") as f:
-        json.dump(mapping_data, f, indent=2, default=str)
+        json.dump(mapping, f, indent=2, default=str)
 
     # Add to in-memory queue
+    mapping_data = {
+        "mapping_id": mapping_id,
+        "confirmed_at": mapping["confirmed_at"],
+        "mapping": mapping,
+        "data_point": mapping.get("data_point", mapping.get("data_point_name", "unknown")),
+        "cmsd_entity": mapping.get("cmsd_entity", "unknown"),
+    }
     _mapping_queue[mapping_id] = mapping_data
 
-    queued_count = len(_mapping_queue)
-    logger.info(f"Mapping queued: {mapping_id} (queue size: {queued_count})")
+    field_map = mapping.get("mapping", {})
+    approved = sum(1 for f in field_map.values() if isinstance(f, dict) and f.get("status") == "approved")
+
+    logger.info(f"Mapping confirmed: {mapping_id} → {mapping.get('cmsd_entity', '?')} ({len(field_map)} fields)")
     return {
         "success": True,
-        "saved_to": filepath,
-        "queue_size": queued_count,
-        "message": f"Mapping added to queue. {queued_count} mapping(s) waiting for generation.",
+        "mapping_id": mapping_id,
+        "cmsd_entity": mapping.get("cmsd_entity", ""),
+        "field_count": len(field_map),
+        "approved_count": approved,
+        "message": f"Mapping confirmed for {mapping.get('cmsd_entity', 'entity')}",
     }
 
 
@@ -630,6 +948,67 @@ async def edit_queued_mapping(mapping_id: str, request: dict):
     with open(filepath, "w", encoding="utf-8") as f:
         json.dump(_mapping_queue[mapping_id], f, indent=2, default=str)
     return {"success": True, "mapping": _mapping_queue[mapping_id]}
+
+
+# ─── Confirmed Mappings (Review Queue) ─────────────────────
+
+
+@router.get("/mappings")
+async def list_mappings():
+    """List all confirmed mappings from .agent-mappings/"""
+    mappings = []
+    mappings_dir = _mappings_dir()
+    if os.path.isdir(mappings_dir):
+        for filename in sorted(os.listdir(mappings_dir)):
+            if not filename.endswith(".json"):
+                continue
+            filepath = os.path.join(mappings_dir, filename)
+            try:
+                with open(filepath, "r") as f:
+                    data = json.load(f)
+                field_map = data.get("mapping", {})
+                approved = sum(1 for f in field_map.values()
+                               if isinstance(f, dict) and f.get("status", "approved") != "flagged")
+                flagged = sum(1 for f in field_map.values()
+                              if isinstance(f, dict) and f.get("status") == "flagged")
+                mappings.append({
+                    "id": filename.replace(".json", ""),
+                    "data_point": data.get("data_point", data.get("data_point_name", "")),
+                    "cmsd_entity": data.get("cmsd_entity", ""),
+                    "source": data.get("source", {}),
+                    "instances": data.get("instances", {}),
+                    "field_count": len(field_map),
+                    "approved_count": approved,
+                    "flagged_count": flagged,
+                    "confirmed_at": data.get("confirmed_at", ""),
+                })
+            except Exception as e:
+                logger.warning(f"Failed to read mapping {filename}: {e}")
+    return {"mappings": mappings}
+
+
+@router.get("/mappings/{mapping_id}")
+async def get_mapping(mapping_id: str):
+    """Get a single confirmed mapping by ID (full data for editing)."""
+    filepath = os.path.join(_mappings_dir(), f"{mapping_id}.json")
+    if not os.path.exists(filepath):
+        raise HTTPException(status_code=404, detail="Mapping not found")
+    with open(filepath, "r") as f:
+        data = json.load(f)
+    data["id"] = mapping_id
+    return data
+
+
+@router.delete("/mappings/{mapping_id}")
+async def delete_mapping(mapping_id: str):
+    """Delete a confirmed mapping."""
+    filepath = os.path.join(_mappings_dir(), f"{mapping_id}.json")
+    if not os.path.exists(filepath):
+        raise HTTPException(status_code=404, detail="Mapping not found")
+    os.remove(filepath)
+    # Also remove from in-memory queue if present
+    _mapping_queue.pop(mapping_id, None)
+    return {"success": True, "message": f"Mapping {mapping_id} deleted"}
 
 
 # ─── Code Generation Pipeline ───────────────────────────────

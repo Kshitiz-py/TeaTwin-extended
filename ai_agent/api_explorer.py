@@ -117,7 +117,9 @@ class APIExplorer:
         """
         paths = []
 
-        def flatten(node: dict):
+        def flatten(node):
+            if not isinstance(node, dict):
+                return
             if node.get("type") not in ("dict", "list"):
                 paths.append({
                     "path": node["path"],
@@ -126,8 +128,13 @@ class APIExplorer:
                 })
             children = node.get("children")
             if isinstance(children, dict):
-                for child in children.values():
-                    flatten(child)
+                # Check if children is a child node itself (has "type" key)
+                # vs a dict-of-children (values are nodes)
+                if "type" in children:
+                    flatten(children)
+                else:
+                    for child in children.values():
+                        flatten(child)
             elif isinstance(children, str):
                 pass  # truncated
 

@@ -113,6 +113,20 @@ export interface SmartReanalyzeRequest {
   endpoints?: EndpointInput[];
 }
 
+// ─── Confirmed Mappings (Review Queue) ─────────────────────
+
+export interface MappingSummary {
+  id: string;
+  data_point: string;
+  cmsd_entity: string;
+  source: { base_url: string; endpoint: string; method: string; auth?: any };
+  instances: { count_path: string; key_field: string };
+  field_count: number;
+  approved_count: number;
+  flagged_count: number;
+  confirmed_at: string;
+}
+
 // ─── Code Generation ───────────────────────────────────────
 
 export interface CodeGenerationReport {
@@ -265,6 +279,44 @@ export const agentApi = {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return res.json();
   },
+  // Streaming version — returns an abortable fetch for SSE consumption
+  analyzeMappingStream(body: any, onStep: (step: any) => void, onResult: (result: any) => void, onError: (msg: string) => void) {
+    const controller = new AbortController();
+    fetch(`${BASE}/mapping/analyze-stream`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    }).then(async (res) => {
+      if (!res.ok) { onError(`HTTP ${res.status}`); return; }
+      const reader = res.body?.getReader();
+      if (!reader) { onError('No response stream'); return; }
+      const decoder = new TextDecoder();
+      let buffer = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+        let eventType = '';
+        for (const line of lines) {
+          if (line.startsWith('event: ')) eventType = line.slice(7).trim();
+          else if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (eventType === 'step') onStep(data);
+              else if (eventType === 'result') onResult(data);
+              else if (eventType === 'error') onError(data.message);
+            } catch {}
+          }
+        }
+      }
+    }).catch((e) => {
+      if (e.name !== 'AbortError') onError(e.message || 'Stream failed');
+    });
+    return controller;
+  },
   // Mapping — Multi-Endpoint
   async analyzeMappingMulti(body: AnalyzeMappingMultiRequest) {
     const res = await fetch(`${BASE}/mapping/analyze-multi`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -281,6 +333,28 @@ export const agentApi = {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return res.json();
   },
+  // Transformation Execution (deterministic, no LLM)
+  async applyTransformation(rawValue: string, transformation: any): Promise<{ converted_value: string | null; success: boolean; error?: string }> {
+    const res = await fetch(`${BASE}/mapping/apply-transformation`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ raw_value: rawValue, transformation }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  },
+  // Review Reanalyze (per-field flagged reanalysis)
+  async reviewReanalyze(body: {
+    current_mapping: Record<string, any>;
+    flagged_fields: { field: string; comment: string }[];
+    data_point_name: string;
+    cmsd_entity: string;
+    approved_payloads: any[];
+  }) {
+    const res = await fetch(`${BASE}/mapping/review-reanalyze`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  },
   // Smart Reanalyze
   async smartReanalyze(body: SmartReanalyzeRequest) {
     const res = await fetch(`${BASE}/mapping/smart-reanalyze`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -288,7 +362,7 @@ export const agentApi = {
     return res.json();
   },
   // Mapping Queue (batch)
-  async confirmMapping(id: string, body: any): Promise<{ success: boolean; saved_to: string; queue_size: number; message: string }> {
+  async confirmMapping(id: string, body: any): Promise<{ success: boolean; mapping_id: string; cmsd_entity: string; field_count: number; approved_count: number; message: string }> {
     const res = await fetch(`${BASE}/mapping/${id}/confirm`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return res.json();
@@ -352,6 +426,36 @@ export const agentApi = {
   },
   async getGitStatus(): Promise<GitStatus> {
     const res = await fetch(`${BASE}/git/status`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  },
+  // Confirmed Mappings (Review Queue)
+  async listMappings(): Promise<{ mappings: MappingSummary[] }> {
+    const res = await fetch(`${BASE}/mappings`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  },
+  async getMapping(id: string): Promise<any> {
+    const res = await fetch(`${BASE}/mappings/${id}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  },
+  async validateMappingTypes(mapping: any, entityType: string): Promise<{
+    success: boolean; entity_type: string; fields: Record<string, {
+      api_path: string; raw_value: any; expected_type: string;
+      valid: boolean; error: string; suggestion: string;
+    }>; all_valid: boolean;
+  }> {
+    const res = await fetch(`${BASE}/mapping/validate-types`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mapping, cmsd_entity: entityType }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  },
+  async deleteMapping(id: string): Promise<{ success: boolean; message: string }> {
+    const res = await fetch(`${BASE}/mappings/${id}`, { method: 'DELETE' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return res.json();
   },

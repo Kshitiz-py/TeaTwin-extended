@@ -1,4 +1,35 @@
-"""Jobs and Job Effort endpoints (MES)"""
+"""
+MES Operational Data — Jobs & Job Efforts (Live Shop-Floor Execution).
+
+Serves live job execution data from the Mock MES. Jobs represent the
+real-time execution of production orders on the shop floor — they are the
+operational counterpart to SAP Order/OrderLine master data.
+
+SAP vs MES Distinction:
+  - **SAP (Master Data):** Orders and OrderLines are *planned* — they define
+    *what* to produce, *when* it is due, and *which* ProcessPlan to follow.
+  - **MES (Operational Data):** Jobs are *live* — they track *actual*
+    execution status, start/end timestamps, current process step, and
+    real effort measurements (processing time, parts produced/scrapped).
+
+  The digital twin consumes both layers: SAP Order data provides the demand
+  signal; MES Job data provides the real-time state that drives CMSD
+  production simulation.
+
+CMSD Entity Mapping:
+  - ``Job``                        → CMSD **Job** (live execution record)
+  - ``JobEffort``                  → CMSD **Job Effort Description**
+  - Job → OrderLine (SAP)          → links the live job back to planned demand
+  - Job → ProcessPlan              → resolves the routing for simulation
+  - Job → current_process_ref      → active CMSD **Process** step
+
+Key Endpoints:
+  | Method | Path                     | Description                               |
+  |--------|--------------------------|-------------------------------------------|
+  | GET    | /jobs                    | List jobs (filterable by status)          |
+  | GET    | /jobs/{id}              | Single job with effort records            |
+  | GET    | /jobs/{id}/progress     | Step-by-step progress through the routing |
+"""
 
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -17,6 +48,16 @@ def list_jobs(
     status: str | None = Query(None, description="Filter by status"),
     db: Session = Depends(get_db),
 ):
+    """List live Jobs, optionally filtered by execution status.
+
+    Returns ``count`` and ``jobs`` array with identifier, status, priority,
+    scheduling dates (release, start, end, due), and references to the parent
+    OrderLine, ProcessPlan, and current Process step.
+
+    CMSD relevance: Provides the live job queue for the digital twin.
+    Job status drives real-time resource allocation and KPI calculation
+    in CMSD simulation.
+    """
     q = db.query(Job)
     if status:
         q = q.filter(Job.status == status)
@@ -26,6 +67,16 @@ def list_jobs(
 
 @router.get("/jobs/{identifier}")
 def get_job(identifier: str, db: Session = Depends(get_db)):
+    """Get a single live Job with all JobEffort records.
+
+    Each effort record captures measured processing time, setup time, and
+    quality metrics (parts produced vs. scrapped). These real measurements
+    feed CMSD JobEffortDescription entities, enabling performance analysis
+    and variance-from-plan calculations.
+
+    CMSD relevance: Populates the CMSD Job → JobEffortDescription chain,
+    providing actual-vs-planned comparison data for simulation.
+    """
     job = db.query(Job).filter(Job.identifier == identifier).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -45,6 +96,15 @@ def get_job(identifier: str, db: Session = Depends(get_db)):
 
 @router.get("/jobs/{identifier}/progress")
 def get_job_progress(identifier: str, db: Session = Depends(get_db)):
+    """Get step-by-step progress of a Job through its ProcessPlan.
+
+    Calculates total steps in the routing, current step index, current
+    process name, and percentage complete. Useful for progress bars and
+    remaining-work estimation in the dashboard.
+
+    CMSD relevance: Progress data feeds CMSD Job status monitoring,
+    enabling real-time WIP tracking and throughput prediction.
+    """
     job = db.query(Job).filter(Job.identifier == identifier).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -67,6 +127,12 @@ def get_job_progress(identifier: str, db: Session = Depends(get_db)):
 
 
 def _job_to_dict(j: Job) -> dict:
+    """Serialize a Job ORM model to a JSON-safe dict.
+
+    Includes all scheduling timestamps, status, priority, and the chain of
+    references: parent OrderLine → ProcessPlan → current Process. Each missing
+    reference gracefully resolves to None.
+    """
     return {
         "identifier": j.identifier,
         "status": j.status,
@@ -79,3 +145,5 @@ def _job_to_dict(j: Job) -> dict:
         "process_plan_identifier": j.process_plan_ref.identifier if j.process_plan_ref else None,
         "current_process_identifier": j.current_process_ref.identifier if j.current_process_ref else None,
     }
+
+

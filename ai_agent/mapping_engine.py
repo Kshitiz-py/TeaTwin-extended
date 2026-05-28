@@ -6,12 +6,20 @@ Enhanced: multi-endpoint support, raw/converted values, smart reanalysis.
 
 import json
 import logging
+import sys, os
 from typing import Any
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from shared.transform import (
+    execute_transformation, validate_transformation,
+    TRANSFORMATION_PRESETS, VALID_TRANSFORMATIONS,
+)
 
 from .llm import llm_client
 from .rag.retriever import retriever
 
 logger = logging.getLogger("ai-agent.mapping-engine")
+
 
 # Known CMSD entities and their key fields (for validation)
 CMSD_ENTITY_FIELDS: dict[str, list[str]] = {
@@ -161,6 +169,132 @@ class MappingEngine:
             temperature=0.3,
         )
 
+    async def review_reanalyze(
+        self,
+        data_point_name: str,
+        cmsd_entity: str,
+        current_mapping: dict[str, Any],
+        flagged_fields: list[dict[str, str]],
+        payload_analyses: list[dict[str, Any]] | None = None,
+        rag_context: str | None = None,
+    ) -> dict[str, Any]:
+        """
+        Targeted reanalysis: only refine fields the user has flagged.
+        flagged_fields is [{"field": "cycle_time", "comment": "use seconds"}, ...].
+        Returns the full mapping with only flagged fields updated.
+        """
+        if not flagged_fields:
+            return current_mapping
+
+        context = rag_context or ""
+        cmsd_fields = CMSD_ENTITY_FIELDS.get(cmsd_entity, [])
+
+        flagged_desc = "\n".join(
+            f"  - {f['field']}: {f.get('comment', '(no comment)')}"
+            for f in flagged_fields
+        )
+        flagged_names = {f["field"] for f in flagged_fields}
+
+        # Only include the flagged fields + surrounding context in the prompt
+        relevant_mapping = {
+            k: v for k, v in current_mapping.get("mapping", {}).items()
+            if k in flagged_names
+        }
+
+        system_prompt = (
+            "You are an expert manufacturing data mapping engine. "
+            "Your task is to REFINE specific field mappings based on user feedback.\n\n"
+            "CRITICAL RULES:\n"
+            "1. ONLY return the fields listed under 'Flagged Fields' below. Do NOT return any other fields.\n"
+            "2. Use the user's comment for each field as guidance for how to fix the mapping.\n"
+            "3. type_conversion MUST be 'none' for every field. converted_value MUST equal raw_value.\n"
+            "4. Set confidence to 'manual' for all returned fields.\n"
+            "5. Look carefully at the API payload to find the correct field path.\n\n"
+            "Output format: JSON with ONLY the changed fields in the mapping:\n"
+            '{\n'
+            '  "mapping": {\n'
+            '    "cmsd_field_name": {\n'
+            '      "api_path": "corrected.path.to.field",\n'
+            '      "type_conversion": "none",\n'
+            '      "raw_value": "value from API payload at that path",\n'
+            '      "converted_value": "MUST equal raw_value (never transform)",\n'
+            '      "confidence": "manual",\n'
+            '      "source_endpoint": "which endpoint"\n'
+            '    }\n'
+            '  },\n'
+            '  "notes": "brief summary of what was changed"\n'
+            '}\n\n'
+            "IMPORTANT: Output ONLY the JSON object. No markdown, no explanation."
+        )
+
+        payload_info = ""
+        if payload_analyses:
+            for pa in payload_analyses:
+                payload_info += json.dumps(pa, indent=2, default=str)[:2000] + "\n"
+
+        user_prompt = (
+            f"## Data Point: {data_point_name}\n"
+            f"## CMSD Entity: {cmsd_entity}\n"
+            f"## Valid CMSD Fields: {', '.join(cmsd_fields)}\n\n"
+            f"## Flagged Fields (ONLY fix these):\n{flagged_desc}\n\n"
+            f"## Current mappings for flagged fields:\n"
+            f"{json.dumps(relevant_mapping, indent=2)}\n\n"
+            f"## API Payload Data:\n{payload_info}\n\n"
+            f"## RAG Context:\n{context[:1500]}\n\n"
+            f"Refine ONLY the flagged fields based on the user comments. "
+            f"Find the correct api_path in the payload data."
+        )
+
+        try:
+            result = llm_client.chat_json(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                temperature=0.1,
+            )
+            refined = self._merge_review_refinements(current_mapping, result, cmsd_entity, flagged_names)
+            return refined
+        except Exception as e:
+            logger.error(f"Review reanalyze failed: {e}")
+            return {**current_mapping, "error": str(e)}
+
+    def _merge_review_refinements(
+        self,
+        current_mapping: dict[str, Any],
+        llm_result: dict[str, Any],
+        cmsd_entity: str,
+        flagged_fields: set[str],
+    ) -> dict[str, Any]:
+        """Merge review refinements — only update fields that were flagged."""
+        merged = dict(current_mapping)
+        merged_mapping = dict(merged.get("mapping", {}))
+
+        llm_mapping = llm_result.get("mapping", {})
+        for field, info in llm_mapping.items():
+            if field not in flagged_fields:
+                continue
+            if isinstance(info, dict):
+                merged_mapping[field] = {
+                    "api_path": info.get("api_path", merged_mapping.get(field, {}).get("api_path", "")),
+                    "type_conversion": info.get("type_conversion", "none"),
+                    "raw_value": info.get("raw_value", merged_mapping.get(field, {}).get("raw_value", "")),
+                    "converted_value": info.get("converted_value", ""),
+                    "sample_value": info.get("sample_value", info.get("raw_value", "")),
+                    "confidence": "manual",
+                    "source_endpoint": info.get("source_endpoint", merged_mapping.get(field, {}).get("source_endpoint", "")),
+                    "transformation": info.get("transformation", merged_mapping.get(field, {}).get("transformation", None)),
+                }
+                # Unconditionally force type_conversion="none" — LLM never transforms
+                merged_mapping[field]["type_conversion"] = "none"
+                merged_mapping[field]["converted_value"] = merged_mapping[field]["raw_value"]
+
+        merged["mapping"] = merged_mapping
+        merged["unmapped_fields"] = [
+            f for f in CMSD_ENTITY_FIELDS.get(cmsd_entity, [])
+            if f not in merged_mapping
+        ]
+        merged["notes"] = llm_result.get("notes", merged.get("notes", ""))
+        return merged
+
     async def smart_reanalyze(
         self,
         data_point_name: str,
@@ -187,8 +321,9 @@ class MappingEngine:
             "1. ONLY change fields the user explicitly mentions in their guidance.\n"
             "2. PRESERVE all other fields exactly as they are in the current mapping.\n"
             "3. Follow the user's instructions precisely (which API to use, which path, which conversion).\n"
-            "4. Include raw_value (exact value from API payload) and converted_value (after type_conversion) for changed fields.\n"
-            "5. Set confidence to 'manual' for fields changed per user guidance.\n\n"
+            "4. Include raw_value (exact value from API payload). converted_value MUST equal raw_value.\n"
+            "5. Set confidence to 'manual' for fields changed per user guidance.\n"
+            "6. CRITICAL: type_conversion MUST be 'none' for every field. Do NOT transform values. Do NOT invent conversions. A numeric value like 360000 must stay '360000', never become 'PT100H'.\n\n"
             "Output format: JSON with this structure:\n"
             '{\n'
             '  "data_point": "string",\n'
@@ -196,9 +331,9 @@ class MappingEngine:
             '  "mapping": {\n'
             '    "cmsd_field_name": {\n'
             '      "api_path": "dot.path.to.field",\n'
-            '      "type_conversion": "none|to_decimal|to_duration|to_weight|to_dimensions",\n'
+            '      "type_conversion": "none",\n'
             '      "raw_value": "value from API payload",\n'
-            '      "converted_value": "value after type conversion",\n'
+            '      "converted_value": "MUST equal raw_value (never transform)",\n'
             '      "sample_value": "value from payload (legacy)",\n'
             '      "confidence": "manual|high|medium|low"\n'
             '    }\n'
@@ -266,6 +401,9 @@ class MappingEngine:
                     "sample_value": info.get("sample_value", info.get("raw_value", "")),
                     "confidence": info.get("confidence", "manual"),
                 }
+                # Unconditionally force type_conversion="none" — LLM never transforms
+                merged_mapping[field]["type_conversion"] = "none"
+                merged_mapping[field]["converted_value"] = merged_mapping[field]["raw_value"]
 
         merged["mapping"] = merged_mapping
         merged["notes"] = llm_result.get("notes", merged.get("notes", ""))
@@ -302,12 +440,14 @@ class MappingEngine:
             "Rules:\n"
             "1. Map API field paths (dot-notation like 'bom_header.bom_id') to CMSD fields.\n"
             "2. For nested structures, use JSONPath-like notation: 'items[*].field'.\n"
-            "3. Include type conversion hints when needed (e.g., string→Decimal, seconds→Duration).\n"
+            "3. Do NOT propose type conversions. Only map fields. All type_conversion values must be 'none'.\n"
             "4. If a CMSD field appears to have no match in the payload, set it to null.\n"
             "5. Be thorough — attempt to map EVERY CMSD field that has a matching field in the payload, "
             "even if the match is approximate. Only leave a field unmapped if it truly has no counterpart.\n"
-            "6. Include 'raw_value' (exact value from the API payload at the field path) AND "
-            "'converted_value' (value after applying type_conversion) for each mapping.\n"
+            "6. Include 'raw_value' (exact value from the API payload at the field path). "
+            "ALWAYS set 'converted_value' equal to 'raw_value'. type_conversion MUST be 'none' for every field. "
+            "Do NOT transform values. Do NOT invent conversions. "
+            "A numeric value like 360000 must stay '360000', never become 'PT100H'.\n"
             "7. Identify the array of entity instances in the payload: find the JSONPath to the array "
             "(e.g., $.resources[*]) and the field used as unique identifier within each item.\n\n"
             "Output format: JSON with this structure:\n"
@@ -318,9 +458,9 @@ class MappingEngine:
             '  "mapping": {\n'
             '    "cmsd_field_name": {\n'
             '      "api_path": "dot.path.to.field",\n'
-            '      "type_conversion": "none|to_decimal|to_duration|to_weight|to_dimensions|string→enum",\n'
+            '      "type_conversion": "none",\n'
             '      "raw_value": "exact value from API payload at that path",\n'
-            '      "converted_value": "value after type conversion",\n'
+            '      "converted_value": "MUST equal raw_value (never transform)",\n'
             '      "sample_value": "value from payload (legacy)",\n'
             '      "confidence": "high|medium|low"\n'
             '    },\n'
@@ -344,13 +484,15 @@ class MappingEngine:
             "Rules:\n"
             "1. Map API field paths (dot-notation like 'bom_header.bom_id') to CMSD fields.\n"
             "2. For nested structures, use JSONPath-like notation: 'items[*].field'.\n"
-            "3. Include type conversion hints when needed (e.g., string→Decimal, seconds→Duration).\n"
+            "3. Do NOT propose type conversions. Only map fields. All type_conversion values must be 'none'.\n"
             "4. A CMSD field can come from ANY of the provided endpoints — pick the best source.\n"
             "5. If a CMSD field appears to have no match in ANY payload, leave it unmapped.\n"
             "6. Be thorough — attempt to map EVERY CMSD field that has a matching field in ANY payload, "
             "even if the match is approximate. Only leave a field unmapped if it truly has no counterpart.\n"
-            "7. Include 'raw_value' (exact value from the API payload at the field path) AND "
-            "'converted_value' (value after applying type_conversion) for each mapping.\n"
+            "7. Include 'raw_value' (exact value from the API payload at the field path). "
+            "ALWAYS set 'converted_value' equal to 'raw_value'. type_conversion MUST be 'none' for every field. "
+            "Do NOT transform values. Do NOT invent conversions. "
+            "A numeric value like 360000 must stay '360000', never become 'PT100H'.\n"
             "8. In 'notes', mention which endpoint each field came from if relevant.\n"
             "9. Identify the array of entity instances across payloads: find the JSONPath to the array "
             "(e.g., $.resources[*]) and the field used as unique identifier within each item.\n\n"
@@ -362,9 +504,9 @@ class MappingEngine:
             '  "mapping": {\n'
             '    "cmsd_field_name": {\n'
             '      "api_path": "dot.path.to.field",\n'
-            '      "type_conversion": "none|to_decimal|to_duration|to_weight|to_dimensions|string→enum",\n'
+            '      "type_conversion": "none",\n'
             '      "raw_value": "exact value from API payload at that path",\n'
-            '      "converted_value": "value after type conversion",\n'
+            '      "converted_value": "MUST equal raw_value (never transform)",\n'
             '      "sample_value": "value from payload (legacy)",\n'
             '      "source_endpoint": "which endpoint this came from",\n'
             '      "confidence": "high|medium|low"\n'
@@ -460,6 +602,7 @@ class MappingEngine:
         # Validate each mapped field
         for cmsd_field, map_info in mapping.items():
             if isinstance(map_info, dict):
+                transformation = map_info.get("transformation", None)
                 validated["mapping"][cmsd_field] = {
                     "api_path": map_info.get("api_path", ""),
                     "type_conversion": map_info.get("type_conversion", "none"),
@@ -468,7 +611,11 @@ class MappingEngine:
                     "sample_value": map_info.get("sample_value", map_info.get("raw_value", "")),
                     "confidence": map_info.get("confidence", "medium"),
                     "source_endpoint": map_info.get("source_endpoint", ""),
+                    "transformation": transformation,
                 }
+                # Safety net: when type_conversion is "none", converted_value MUST equal raw_value
+                validated["mapping"][cmsd_field]["type_conversion"] = "none"
+                validated["mapping"][cmsd_field]["converted_value"] = validated["mapping"][cmsd_field]["raw_value"]
             elif isinstance(map_info, str):
                 validated["mapping"][cmsd_field] = {
                     "api_path": map_info,
@@ -478,6 +625,7 @@ class MappingEngine:
                     "sample_value": "",
                     "confidence": "medium",
                     "source_endpoint": "",
+                    "transformation": None,
                 }
 
         # Find unmapped known fields
@@ -501,11 +649,14 @@ class MappingEngine:
     ) -> dict[str, Any]:
         """
         Apply user edits to a mapping.
-        edits is {cmsd_field: {api_path, type_conversion, ...} | null}
+        edits is {cmsd_field: {api_path, type_conversion, transformation, ...} | null}
         null means remove the field from mapping.
+        Validates transformations against TRANSFORMATION_PRESETS.
+        Returns validation_errors key if any transformation is invalid.
         """
         updated = dict(current_mapping)
         mapping = dict(updated.get("mapping", {}))
+        validation_errors: dict[str, str] = {}
 
         for field, edit in edits.items():
             if edit is None:
@@ -513,6 +664,13 @@ class MappingEngine:
                 if field in updated.get("unmapped_fields", []):
                     updated["unmapped_fields"].remove(field)
             else:
+                # Validate transformation if present
+                transform = edit.get("transformation", None)
+                if transform and isinstance(transform, dict) and transform.get("type", "none") != "none":
+                    err = validate_transformation(transform)
+                    if err:
+                        validation_errors[field] = err["error"]
+
                 mapping[field] = {
                     "api_path": edit.get("api_path", mapping.get(field, {}).get("api_path", "")),
                     "type_conversion": edit.get("type_conversion", "none"),
@@ -521,7 +679,11 @@ class MappingEngine:
                     "sample_value": edit.get("sample_value", edit.get("raw_value", mapping.get(field, {}).get("sample_value", ""))),
                     "confidence": "manual",
                     "source_endpoint": edit.get("source_endpoint", mapping.get(field, {}).get("source_endpoint", "")),
+                    "transformation": transform,
                 }
+                # Unconditionally force type_conversion="none" — user transforms go through apply-transformation
+                mapping[field]["type_conversion"] = "none"
+                mapping[field]["converted_value"] = mapping[field]["raw_value"]
 
         updated["mapping"] = mapping
         updated["unmapped_fields"] = [
@@ -529,6 +691,8 @@ class MappingEngine:
             if f not in mapping
         ]
         updated["requires_manual_review"] = len(updated["unmapped_fields"]) > 0
+        if validation_errors:
+            updated["validation_errors"] = validation_errors
         return updated
 
 

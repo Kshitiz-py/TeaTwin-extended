@@ -4,7 +4,13 @@ import FactoryTopology from './components/FactoryTopology';
 import ResourcePanel from './components/ResourcePanel';
 import OrderTracker from './components/OrderTracker';
 import ChangeLog from './components/ChangeLog';
+import SetupWizard from './components/SetupWizard';
+import ReviewQueue from './components/ReviewQueue';
+import AgentConnect from './components/AgentConnect';
 import { api } from './services/api';
+import { agentApi, AgentStatus } from './services/agentApi';
+
+type AppMode = 'dashboard' | 'wizard';
 
 interface Summary {
   resources: number;
@@ -20,72 +26,354 @@ interface Summary {
   status: string;
 }
 
-const statusColor = (s: string | null): string => {
-  if (!s) return '#94a3b8';
-  switch (s) {
-    case 'busy': return '#3b82f6';
-    case 'idle': return '#22c55e';
-    case 'broken': return '#ef4444';
-    case 'setup': return '#f59e0b';
-    case 'paused': return '#94a3b8';
-    case 'underMaintenance': return '#a855f7';
-    case 'charging': return '#06b6d4';
-    default: return '#94a3b8';
-  }
-};
-
 export default function App() {
   const [summary, setSummary] = useState<Summary | null>(null);
-  const [activeTab, setActiveTab] = useState<'topology' | 'resources' | 'orders' | 'changes'>('topology');
+  const [activeTab, setActiveTab] = useState<'topology' | 'resources' | 'orders' | 'changes' | 'mappings'>('topology');
+  const [activeMode, setActiveMode] = useState<AppMode>('dashboard');
+  const [agentStatus, setAgentStatus] = useState<AgentStatus | null>(null);
+  const [sourceCount, setSourceCount] = useState(0);
+  const [initialCheckDone, setInitialCheckDone] = useState(false);
   const { events, connected } = useWebSocket();
 
+  // Global dev mode — controls hardcoded factory visibility
+  const [devMode, setDevMode] = useState(() => {
+    try { return localStorage.getItem('cmsd_dev_mode') === 'true'; } catch { return false; }
+  });
+  const toggleDevMode = () => {
+    const next = !devMode;
+    setDevMode(next);
+    try { localStorage.setItem('cmsd_dev_mode', String(next)); } catch {}
+  };
+  const [hardcodedLoaded, setHardcodedLoaded] = useState(() => {
+    try { return sessionStorage.getItem('hardcoded_loaded') === 'true'; } catch { return false; }
+  });
+  const [initialWizardStep, setInitialWizardStep] = useState(0);
+
+  // ─── Initialisation: check agent status + source count ───
   useEffect(() => {
-    api.getSummary().then(setSummary).catch(console.error);
+    let agentOk = false;
+    let sourcesOk = false;
+
+    const maybeDone = () => {
+      if (agentOk !== undefined && sourcesOk !== undefined) {
+        setInitialCheckDone(true);
+      }
+    };
+
+    // Check agent
+    agentApi.getAgentStatus()
+      .then(s => {
+        setAgentStatus(s);
+        agentOk = true;
+      })
+      .catch(() => {
+        setAgentStatus(null);
+        agentOk = false;
+      })
+      .finally(maybeDone);
+
+    // Check sources
+    agentApi.getSources()
+      .then(data => {
+        const count = data?.sources?.length ?? 0;
+        setSourceCount(count);
+        sourcesOk = true;
+        // Option C: if no sources configured, force wizard mode
+        if (count === 0) {
+          setActiveMode('wizard');
+        }
+      })
+      .catch(() => {
+        setSourceCount(0);
+        sourcesOk = false;
+        setActiveMode('wizard');
+      })
+      .finally(maybeDone);
+  }, []);
+
+  // ─── Poll summary only when dashboard is active AND sources exist ───
+  useEffect(() => {
+    if (activeMode === 'dashboard' && sourceCount > 0) {
+      api.getSummary().then(setSummary).catch(console.error);
+      const interval = setInterval(() => {
+        api.getSummary().then(setSummary).catch(() => {});
+      }, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [activeMode, sourceCount]);
+
+  // Refresh agent status periodically
+  useEffect(() => {
     const interval = setInterval(() => {
-      api.getSummary().then(setSummary).catch(() => {});
-    }, 5000);
+      agentApi.getAgentStatus()
+        .then(setAgentStatus)
+        .catch(() => setAgentStatus(null));
+    }, 15000);
     return () => clearInterval(interval);
   }, []);
+
+  const toggleMode = () => {
+    if (activeMode === 'wizard' && sourceCount === 0) return;
+    if (activeMode === 'dashboard') setInitialWizardStep(0);  // reset step on manual toggle
+    setActiveMode(activeMode === 'dashboard' ? 'wizard' : 'dashboard');
+  };
+
+  const handleAgentConnected = () => {
+    agentApi.getAgentStatus()
+      .then(setAgentStatus)
+      .catch(() => {});
+  };
+
+  const handleAgentDisconnected = () => {
+    setAgentStatus({
+      connected: false,
+    });
+  };
+
+  const handleSetupComplete = () => {
+    // Re-check source count after setup
+    agentApi.getSources()
+      .then(data => {
+        const count = data?.sources?.length ?? 0;
+        setSourceCount(count);
+        if (count > 0) {
+          setActiveMode('dashboard');
+        }
+      })
+      .catch(() => {});
+  };
 
   const tabs = [
     { key: 'topology' as const, label: 'Factory Topology' },
     { key: 'resources' as const, label: 'Resources' },
     { key: 'orders' as const, label: 'Orders' },
     { key: 'changes' as const, label: `Change Log (${events.length})` },
+    { key: 'mappings' as const, label: 'Mapping Registry' },
   ];
+
+  const agentOnline = agentStatus?.connected ?? false;
+
+  // ─── Loading spinner ─────────────────────────────────────
+
+  if (!initialCheckDone) {
+    return (
+      <div style={{
+        minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: '#0f172a', color: '#94a3b8', fontSize: '14px',
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{
+            width: '40px', height: '40px', margin: '0 auto 16px',
+            border: '3px solid #334155', borderTopColor: '#3b82f6', borderRadius: '50%',
+            animation: 'spin 0.8s linear infinite',
+          }} />
+          <style>{'@keyframes spin { to { transform: rotate(360deg); } }'}</style>
+          Checking system status...
+        </div>
+      </div>
+    );
+  }
+
+  // ─── Shared Header ─────────────────────────────────────
+
+  const modeToggleButton = (
+    <button
+      onClick={toggleMode}
+      disabled={activeMode === 'wizard' && sourceCount === 0}
+      title={activeMode === 'wizard' && sourceCount === 0 ? 'Configure at least one data source first' : ''}
+      style={{
+        padding: '6px 16px', borderRadius: '6px', border: '1px solid #475569',
+        background: (activeMode === 'wizard' && sourceCount === 0) ? '#1e293b' : '#1e293b',
+        color: (activeMode === 'wizard' && sourceCount === 0) ? '#64748b' : '#e2e8f0',
+        cursor: (activeMode === 'wizard' && sourceCount === 0) ? 'not-allowed' : 'pointer',
+        fontSize: '13px', fontWeight: 500,
+        display: 'flex', alignItems: 'center', gap: '6px',
+        opacity: (activeMode === 'wizard' && sourceCount === 0) ? 0.5 : 1,
+      }}
+    >
+      {activeMode === 'dashboard' ? (
+        <><span>⚙️</span> Setup Wizard</>
+      ) : (
+        <><span>📊</span> Dashboard</>
+      )}
+    </button>
+  );
+
+  const sharedHeader = (title: string, subtitle: string) => (
+    <header style={{
+      background: '#1e293b', padding: '12px 24px',
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      borderBottom: '1px solid #334155',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+        {modeToggleButton}
+        <div>
+          <h1 style={{ fontSize: '20px', fontWeight: 700, color: '#f1f5f9', margin: 0 }}>
+            {title}
+          </h1>
+          <p style={{ fontSize: '12px', color: '#94a3b8', marginTop: '2px' }}>
+            {subtitle}
+          </p>
+        </div>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+        {/* Agent status pill */}
+        <span style={{
+          padding: '4px 10px', borderRadius: '12px', fontSize: '12px',
+          background: agentOnline ? '#064e3b' : agentStatus === null ? '#7f1d1d' : '#78350f',
+          color: agentOnline ? '#6ee7b7' : agentStatus === null ? '#fca5a5' : '#fbbf24',
+        }}>
+          <span style={{
+            display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%',
+            background: agentOnline ? '#22c55e' : agentStatus === null ? '#ef4444' : '#f59e0b',
+            boxShadow: agentOnline ? '0 0 6px #22c55e' : '0 0 6px #ef4444',
+            marginRight: '4px',
+          }} />
+          Agent {agentOnline ? 'Online' : agentStatus === null ? 'Offline' : 'Unconfigured'}
+        </span>
+        {/* Source count pill */}
+        <span style={{
+          padding: '4px 10px', borderRadius: '12px', fontSize: '12px',
+          background: sourceCount > 0 ? '#064e3b' : '#7f1d1d',
+          color: sourceCount > 0 ? '#6ee7b7' : '#fca5a5',
+        }}>
+          {sourceCount > 0 ? `📡 ${sourceCount} Source${sourceCount > 1 ? 's' : ''}` : '📡 No Sources'}
+        </span>
+        {/* Dev mode toggle — always visible */}
+        <span onClick={toggleDevMode}
+          title={devMode ? 'Dev mode ON — hardcoded factory available' : 'Dev mode OFF — mapping-driven only'}
+          style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontSize: '10px', color: devMode ? '#a5b4fc' : '#475569', userSelect: 'none' }}>
+          <span style={{ display: 'inline-block', width: '22px', height: '12px', borderRadius: '6px', background: devMode ? '#4f46e5' : '#334155', position: 'relative', transition: 'background 0.2s' }}>
+            <span style={{ position: 'absolute', top: '1px', left: devMode ? '11px' : '1px', width: '10px', height: '10px', borderRadius: '50%', background: '#fff', transition: 'left 0.2s' }} />
+          </span>
+          Dev
+        </span>
+        {activeMode === 'dashboard' && (
+          <>
+            <span style={{ color: '#334155' }}>|</span>
+            <span style={{
+              padding: '4px 12px', borderRadius: '12px', fontSize: '12px',
+              background: connected ? '#064e3b' : '#7f1d1d',
+              color: connected ? '#6ee7b7' : '#fca5a5',
+            }}>
+              {connected ? 'WS Live' : 'WS Offline'}
+            </span>
+            <span style={{ fontSize: '12px', color: '#94a3b8' }}>
+              Last poll: {summary?.last_poll_time
+                ? new Date(summary.last_poll_time).toLocaleTimeString()
+                : '...'}
+            </span>
+          </>
+        )}
+      </div>
+    </header>
+  );
+
+  // ─── Wizard Mode ───────────────────────────────────────
+
+  if (activeMode === 'wizard') {
+    return (
+      <div style={{ minHeight: '100vh', background: '#0f172a', color: '#f1f5f9' }}>
+        {sharedHeader(
+          'CMSD Digital Twin — Setup Wizard',
+          'AI-guided API to CMSD mapping — connect agent, configure sources, map, review'
+        )}
+
+        <SetupWizard onLaunch={handleSetupComplete} onDisconnected={handleAgentDisconnected} devMode={devMode} initialStep={initialWizardStep} />
+      </div>
+    );
+  }
+
+  // ─── Dashboard Mode ──────────────────────────────────────
+
+  // Block dashboard if no sources configured
+  if (sourceCount === 0) {
+    return (
+      <div style={{ minHeight: '100vh', background: '#0f172a', color: '#f1f5f9' }}>
+        {sharedHeader(
+          'CMSD Digital Twin — Factory Dashboard',
+          'No data sources configured'
+        )}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', padding: '24px' }}>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>📡</div>
+          <h2 style={{ color: '#f1f5f9', fontSize: '22px', margin: '0 0 8px' }}>No Data Sources Configured</h2>
+          <p style={{ color: '#94a3b8', fontSize: '14px', margin: '0 0 24px', textAlign: 'center', maxWidth: '400px' }}>
+            The digital twin dashboard requires at least one data source to build the factory model.
+            Use the Setup Wizard to connect your SAP and MES APIs.
+          </p>
+          <button
+            onClick={() => setActiveMode('wizard')}
+            style={{
+              padding: '12px 24px', borderRadius: '8px', border: 'none', cursor: 'pointer',
+              background: '#2563eb', color: '#f1f5f9', fontSize: '15px', fontWeight: 600,
+            }}
+          >
+            ⚙️ Open Setup Wizard
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ minHeight: '100vh' }}>
-      {/* Header */}
-      <header style={{
-        background: '#1e293b', padding: '12px 24px',
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        borderBottom: '1px solid #334155',
-      }}>
-        <div>
-          <h1 style={{ fontSize: '20px', fontWeight: 700, color: '#f1f5f9' }}>
-            CMSD Digital Twin — Factory Dashboard
-          </h1>
-          <p style={{ fontSize: '12px', color: '#94a3b8', marginTop: '2px' }}>
-            SAP/MES → CMSD Twin | Poll #{summary?.poll_count ?? 0} | 
-            Changes: {summary?.total_changes ?? 0}
-          </p>
+      {sharedHeader(
+        'CMSD Digital Twin — Factory Dashboard',
+        `SAP/MES → CMSD Twin | Poll #${summary?.poll_count ?? 0} | Changes: ${summary?.total_changes ?? 0}`
+      )}
+
+      {/* Warning bar if agent is offline */}
+      {!agentOnline && (
+        <div style={{
+          background: '#78350f', color: '#fbbf24', padding: '8px 24px',
+          fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px',
+          borderBottom: '1px solid #92400e',
+        }}>
+          <span>⚠️</span>
+          AI Agent is offline — RAG-powered mapping and code generation are unavailable.
+          Use the Setup Wizard to connect your Ollama agent.
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <span style={{
-            padding: '4px 12px', borderRadius: '12px', fontSize: '12px',
-            background: connected ? '#064e3b' : '#7f1d1d',
-            color: connected ? '#6ee7b7' : '#fca5a5',
-          }}>
-            {connected ? 'WS Live' : 'WS Offline'}
-          </span>
-          <span style={{ fontSize: '12px', color: '#94a3b8' }}>
-            Last poll: {summary?.last_poll_time 
-              ? new Date(summary.last_poll_time).toLocaleTimeString() 
-              : '...'}
-          </span>
+      )}
+
+      {/* Simulated data banner */}
+      {devMode && (
+        <div style={{
+          background: '#422006', color: '#fde68a', padding: '6px 24px',
+          fontSize: '12px', display: 'flex', alignItems: 'center', gap: '10px',
+          borderBottom: '1px solid #78350f',
+        }}>
+          <span>🔧</span>
+          {hardcodedLoaded
+            ? 'Hardcoded factory loaded alongside mapping-driven instances.'
+            : 'Dev mode active — load hardcoded factory to see all mock data.'}
+          <button onClick={async () => {
+            if (hardcodedLoaded) {
+              try { await api.refreshInstances(undefined, false); } catch {}
+              try { sessionStorage.setItem('hardcoded_loaded', 'false'); } catch {}
+              setHardcodedLoaded(false);
+              window.location.reload();
+            } else {
+              try { await api.refreshInstances(undefined, true); } catch {}
+              try { sessionStorage.setItem('hardcoded_loaded', 'true'); } catch {}
+              setHardcodedLoaded(true);
+              window.location.reload();
+            }
+          }}
+            style={{ padding: '3px 10px', borderRadius: '4px', border: '1px solid #f59e0b', background: hardcodedLoaded ? '#7f1d1d' : '#78350f', color: '#fde68a', cursor: 'pointer', fontSize: '11px', fontWeight: 600, whiteSpace: 'nowrap' }}>
+            {hardcodedLoaded ? 'Unload Hardcoded' : 'Load Hardcoded'}
+          </button>
         </div>
-      </header>
+      )}
+      {!devMode && (
+        <div style={{
+          background: '#1e3a5f', color: '#93c5fd', padding: '8px 24px',
+          fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px',
+          borderBottom: '1px solid #1e40af',
+        }}>
+          <span>📢</span>
+          Mapping-driven mode — only confirmed mappings generate instances. Toggle Dev to load hardcoded factory.
+        </div>
+      )}
 
       {/* KPI Cards */}
       {summary && (
@@ -139,6 +427,12 @@ export default function App() {
         {activeTab === 'resources' && <ResourcePanel />}
         {activeTab === 'orders' && <OrderTracker />}
         {activeTab === 'changes' && <ChangeLog events={events} />}
+        {activeTab === 'mappings' && (
+          <ReviewQueue
+            embedded={false}
+            onNavigateToExplorer={() => { setInitialWizardStep(2); setActiveMode('wizard'); }}
+          />
+        )}
       </div>
     </div>
   );

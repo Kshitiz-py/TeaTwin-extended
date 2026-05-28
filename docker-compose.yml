@@ -66,6 +66,8 @@ services:
     restart: unless-stopped
     ports:
       - "8003:8003"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       MYSQL_HOST: mysql
       MYSQL_PORT: "3306"
@@ -82,6 +84,7 @@ services:
       CMSD_TWIN_REPO_PATH: /app/git-repo
     volumes:
       - chromadb_data:/app/chromadb_data
+      - agent_mappings:/app/sap-mes-cmsd-twin/.agent-mappings
       - ./ai_agent/.agent-reports:/app/sap-mes-cmsd-twin/ai_agent/.agent-reports
       # Shared volume approach: mount repo .git for branch/commit operations
       - ../.git:/app/git-repo/.git:rw
@@ -137,6 +140,7 @@ services:
       # Hot-reload: mount writable source dirs so agent changes are picked up
       - ./cmsd_twin_service:/app/sap-mes-cmsd-twin/cmsd_twin_service
       - ./shared:/app/sap-mes-cmsd-twin/shared
+      - agent_mappings:/app/sap-mes-cmsd-twin/.agent-mappings
       - ./ai_agent/config.py:/app/sap-mes-cmsd-twin/ai_agent/config.py
     command: ["python", "-m", "uvicorn", "cmsd_twin_service.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 
@@ -160,3 +164,4 @@ services:
 volumes:
   mysql_data:
   chromadb_data:
+  agent_mappings:

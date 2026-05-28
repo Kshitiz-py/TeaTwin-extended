@@ -26,16 +26,11 @@ class Retriever:
         Retrieve relevant documents for a query.
         Optionally filter by collection names.
         """
-        if collections and len(collections) == 1:
-            return self.vs.query(query, n_results=top_k, filter_collection=collections[0])
-
-        # If multiple collections or no filter, query all
-        results = self.vs.query(query, n_results=top_k * 2)
+        results = self.vs.query(query, n_results=top_k * 3)
 
         # Filter by collections if specified
-        if collections and len(collections) > 1:
+        if collections:
             results = [r for r in results if r.get("metadata", {}).get("collection") in collections]
-            results = results[:top_k]
 
         return results[:top_k]
 
@@ -108,13 +103,9 @@ class Retriever:
         """
         result = {}
         for fp in file_paths:
-            results = self.vs.query(
-                fp,
-                n_results=5,
-                filter_collection="codebase",
-            )
+            results = self.vs.query(fp, n_results=5)
+            results = [r for r in results if r.get("metadata", {}).get("collection") == "codebase"]
             if results:
-                # Find the chunk closest to the file name
                 best = results[0]
                 result[fp] = best.get("content", "")
         return result

@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useEffect, useState } from 'react';
 
 interface FieldMapping {
   api_path: string;
@@ -19,13 +19,61 @@ interface Props {
   mapping: MappingData | null;
   cmsdEntity: string;
   instances?: { count_path?: string; key_field?: string };
+  changedFields?: Set<string>;
+  instanceData?: Record<string, any>;
 }
 
-/**
- * Expand dot-notation paths into a nested object.
- * e.g., {"size.width": {converted_value: 2.5}} becomes {size: {width: 2.5}}
- */
-function expandPaths(fields: Record<string, FieldMapping>): any {
+const highlightKeyframes = `
+@keyframes field-highlight {
+  0% { background: rgba(59, 130, 246, 0.3); }
+  100% { background: transparent; }
+}
+`;
+
+function getValueAtPath(obj: Record<string, any>, path: string): any {
+  if (!path) return undefined;
+  const parts = path.split('.');
+  let current: any = obj;
+  for (const part of parts) {
+    if (current === null || current === undefined) return undefined;
+    if (typeof current === 'object' && part in current) {
+      current = current[part];
+    } else {
+      return undefined;
+    }
+  }
+  return current;
+}
+
+function stripArrayPrefix(apiPath: string, countPath: string): string {
+  if (!countPath || !apiPath) return apiPath;
+  let cleanPath = apiPath.replace(/^\$\./, '');
+  const cleaned = countPath.replace(/^\$\./, '').replace(/\[[*]\]$/, '');
+  const parts = cleaned.split('.').filter(Boolean);
+  const arrayPrefix = parts.join('.');
+  if (!arrayPrefix) return cleanPath;
+  const patterns = [arrayPrefix + '.', arrayPrefix + '[*].', arrayPrefix + '['];
+  for (const pat of patterns) {
+    if (cleanPath.startsWith(pat)) {
+      let rest = cleanPath.slice(pat.length);
+      rest = rest.replace(/^(\d+|\[[*]\])\./, '');
+      return rest || cleanPath;
+    }
+  }
+  const segments = cleanPath.split('.');
+  const clean = segments.filter(s => s !== '' && !/^\d+$/.test(s) && s !== '[*]');
+  const prefixSegs = arrayPrefix.split('.');
+  let startIdx = 0;
+  while (startIdx < prefixSegs.length && startIdx < clean.length && clean[startIdx] === prefixSegs[startIdx]) {
+    startIdx++;
+  }
+  if (startIdx > 0 && startIdx < clean.length) {
+    return clean.slice(startIdx).join('.');
+  }
+  return cleanPath;
+}
+
+function expandPaths(fields: Record<string, FieldMapping>, instanceData?: Record<string, any>, countPath?: string): any {
   const result: any = {};
 
   for (const [cmsdField, info] of Object.entries(fields)) {
@@ -36,17 +84,34 @@ function expandPaths(fields: Record<string, FieldMapping>): any {
       current = current[parts[i]];
     }
     const leaf = parts[parts.length - 1];
+
+    // Use actual instance value if available, otherwise fall back to mapping sample
+    let displayValue = info.converted_value || info.raw_value || '';
+    if (instanceData && info.api_path) {
+      let actual = getValueAtPath(instanceData, info.api_path);
+      if (actual === undefined && countPath) {
+        const relative = stripArrayPrefix(info.api_path, countPath);
+        if (relative !== info.api_path) {
+          actual = getValueAtPath(instanceData, relative);
+        }
+      }
+      if (actual !== undefined && actual !== null) {
+        displayValue = typeof actual === 'object' ? JSON.stringify(actual) : String(actual);
+      }
+    }
+
     current[leaf] = {
-      value: info.converted_value || info.raw_value || '',
+      value: displayValue,
       source: info.source_endpoint || '',
       apiPath: info.api_path,
+      confidence: info.confidence || '',
     };
   }
 
   return result;
 }
 
-function renderJsonNode(obj: any, depth: number = 0): JSX.Element {
+function renderJsonNode(obj: any, depth: number = 0, changedFields?: Set<string>, pathPrefix?: string): JSX.Element {
   if (obj === null || obj === undefined) {
     return <span style={{ color: '#64748b' }}>null</span>;
   }
@@ -71,7 +136,7 @@ function renderJsonNode(obj: any, depth: number = 0): JSX.Element {
         {obj.map((item, i) => (
           <span key={i}>
             {i > 0 && <span style={{ color: '#94a3b8' }}>, </span>}
-            {renderJsonNode(item, depth + 1)}
+            {renderJsonNode(item, depth + 1, changedFields, pathPrefix)}
           </span>
         ))}
         <span style={{ color: '#94a3b8' }}>]</span>
@@ -92,16 +157,45 @@ function renderJsonNode(obj: any, depth: number = 0): JSX.Element {
       {keys.map((key, i) => {
         const val = obj[key];
         const isLeaf = val && typeof val === 'object' && 'value' in val;
+        const fieldPath = pathPrefix ? `${pathPrefix}.${key}` : key;
+        const isChanged = changedFields?.has(fieldPath);
+        const isManual = isLeaf && val.confidence === 'manual';
 
         return (
           <span key={key}>
             {i > 0 && <span style={{ color: '#94a3b8' }}>,{'\n'}</span>}
-            <span style={{ whiteSpace: 'pre' }}>{childIndent}</span>
+            <span
+              style={{
+                whiteSpace: 'pre',
+                animation: isChanged ? 'field-highlight 1.5s ease-out' : undefined,
+                display: 'inline-block',
+                borderRadius: '3px',
+                padding: isChanged ? '0 4px' : undefined,
+              }}
+            >
+              {childIndent}
+            </span>
             <span style={{ color: '#c4b5fd' }}>"{key}"</span>
             <span style={{ color: '#94a3b8' }}>: </span>
             {isLeaf
-              ? renderJsonNode(val.value, depth + 1)
-              : renderJsonNode(val, depth + 1)
+              ? (
+                <span style={{
+                  animation: isChanged ? 'field-highlight 1.5s ease-out' : undefined,
+                  borderRadius: '3px', padding: isChanged ? '0 4px' : undefined,
+                }}>
+                  {renderJsonNode(val.value, depth + 1, changedFields, fieldPath)}
+                  {isManual && (
+                    <span style={{
+                      marginLeft: '6px', fontSize: '9px', color: '#93c5fd',
+                      background: '#1e3a5f', padding: '1px 5px', borderRadius: '8px',
+                      fontWeight: 600, verticalAlign: 'middle',
+                    }}>
+                      manual
+                    </span>
+                  )}
+                </span>
+              )
+              : renderJsonNode(val, depth + 1, changedFields, fieldPath)
             }
           </span>
         );
@@ -113,11 +207,21 @@ function renderJsonNode(obj: any, depth: number = 0): JSX.Element {
   );
 }
 
-export default function EntityPreview({ mapping, cmsdEntity, instances }: Props) {
+export default function EntityPreview({ mapping, cmsdEntity, instances, changedFields, instanceData }: Props) {
+  const [animFields, setAnimFields] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (changedFields && changedFields.size > 0) {
+      setAnimFields(new Set(changedFields));
+      const timer = setTimeout(() => setAnimFields(new Set()), 1600);
+      return () => clearTimeout(timer);
+    }
+  }, [changedFields]);
+
   const expanded = useMemo(() => {
     const fields = mapping?.mapping ?? {};
-    return expandPaths(fields);
-  }, [mapping]);
+    return expandPaths(fields, instanceData, instances?.count_path);
+  }, [mapping, instanceData, instances?.count_path]);
 
   const fields = mapping?.mapping ?? {};
   const fieldCount = Object.keys(fields).length;
@@ -126,16 +230,34 @@ export default function EntityPreview({ mapping, cmsdEntity, instances }: Props)
     return null;
   }
 
+  const manualCount = Object.values(fields).filter(f => f.confidence === 'manual').length;
+  const hasInstanceData = instanceData && Object.keys(instanceData).length > 0;
+
   return (
     <div style={{ marginBottom: '16px' }}>
+      <style>{highlightKeyframes}</style>
       <h4 style={{
         color: '#f1f5f9', margin: '0 0 10px', fontSize: '15px',
         fontWeight: 600,
       }}>
         Entity Preview — {cmsdEntity}
-        {instances?.count_path && (
+        {hasInstanceData && (
+          <span style={{ fontSize: '12px', color: '#86efac', fontWeight: 400, marginLeft: '8px' }}>
+            (live instance)
+          </span>
+        )}
+        {!hasInstanceData && instances?.count_path && (
           <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 400, marginLeft: '8px' }}>
             (sample of one entity)
+          </span>
+        )}
+        {manualCount > 0 && (
+          <span style={{
+            marginLeft: '8px', fontSize: '10px', color: '#93c5fd',
+            background: '#1e3a5f', padding: '2px 8px', borderRadius: '8px',
+            fontWeight: 600, verticalAlign: 'middle',
+          }}>
+            {manualCount} manual
           </span>
         )}
       </h4>
@@ -150,7 +272,7 @@ export default function EntityPreview({ mapping, cmsdEntity, instances }: Props)
           fontFamily: '"Fira Code", "Cascadia Code", "JetBrains Mono", monospace',
           color: '#e2e8f0', whiteSpace: 'pre',
         }}>
-          {renderJsonNode(expanded)}
+          {renderJsonNode(expanded, 0, animFields)}
         </pre>
       </div>
 

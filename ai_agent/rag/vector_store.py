@@ -5,13 +5,12 @@ Supports persistent storage and collection management.
 
 import os
 import logging
-from typing import List, Optional
 
 import chromadb
 from chromadb.config import Settings as ChromaSettings
 
 from ..config import CHROMA_PERSIST_DIR, CHROMA_COLLECTION_NAME, EMBEDDING_DIMENSION
-from ..ollama_client import ollama_client
+from ..llm import llm_client
 
 logger = logging.getLogger("ai-agent.vector-store")
 
@@ -55,7 +54,7 @@ class VectorStore:
             # Truncate very long texts to avoid embedding failures
             truncated = text[:4000] if len(text) > 4000 else text
             try:
-                emb = ollama_client.embed([truncated])
+                emb = llm_client.embed([truncated])
                 if emb:
                     embeddings.append(emb[0])
                 else:
@@ -114,7 +113,6 @@ class VectorStore:
         self,
         query_text: str,
         n_results: int = 5,
-        filter_collection: str | None = None,
     ) -> list[dict]:
         """
         Query the vector store for semantically similar documents.
@@ -122,7 +120,7 @@ class VectorStore:
         """
         # Generate query embedding
         try:
-            query_emb = ollama_client.embed([query_text[:4000]])
+            query_emb = llm_client.embed([query_text[:4000]])
             if not query_emb:
                 return []
             query_embedding = query_emb[0]
@@ -130,16 +128,11 @@ class VectorStore:
             logger.error(f"Query embedding failed: {e}")
             return []
 
-        # Build filter if needed
-        where_filter = None
-        if filter_collection:
-            where_filter = {"collection": filter_collection}
-
-        # Query ChromaDB
+        # Query ChromaDB (without where filter — filter in Python to avoid
+        # ChromaDB metadata indexing issues)
         results = self.collection.query(
             query_embeddings=[query_embedding],
-            n_results=min(n_results, self.collection.count()),
-            where=where_filter,
+            n_results=max(n_results * 3, 30),
             include=["documents", "metadatas", "distances"],
         )
 

@@ -3,6 +3,7 @@ HTTP client for fetching data from Mock SAP and MES APIs.
 All methods are async using httpx.
 """
 
+import base64
 import httpx
 import logging
 from typing import Any
@@ -33,6 +34,50 @@ class APIClient:
         resp = await self._client.get(url)
         resp.raise_for_status()
         return resp.json()
+
+    # ─── Generic fetch (for mapping-driven factory) ──────────
+
+    async def fetch(self, url: str, method: str = "GET",
+                    headers: dict | None = None,
+                    auth_config: dict | None = None) -> dict[str, Any]:
+        """Generic fetch for any URL with optional auth."""
+        if not self._client:
+            raise RuntimeError("APIClient not opened via async context manager")
+
+        request_headers = {}
+        if auth_config:
+            request_headers.update(self._build_auth_headers(auth_config))
+        if headers:
+            request_headers.update(headers)
+
+        if method.upper() == "GET":
+            resp = await self._client.get(url, headers=request_headers)
+        elif method.upper() == "POST":
+            resp = await self._client.post(url, headers=request_headers)
+        else:
+            raise ValueError(f"Unsupported HTTP method: {method}")
+
+        resp.raise_for_status()
+        return resp.json()
+
+    def _build_auth_headers(self, auth_config: dict) -> dict:
+        """Build authentication headers from auth config."""
+        auth_type = auth_config.get("type", "").lower()
+        if auth_type == "bearer":
+            return {"Authorization": f"Bearer {auth_config['token']}"}
+        elif auth_type == "basic":
+            creds = base64.b64encode(
+                f"{auth_config['username']}:{auth_config['password']}".encode()
+            ).decode()
+            return {"Authorization": f"Basic {creds}"}
+        elif auth_type == "apikey":
+            header_name = auth_config.get("header", "X-API-Key")
+            return {header_name: auth_config["key"]}
+        elif auth_type == "none" or not auth_type:
+            return {}
+        else:
+            logger.warning(f"Unknown auth type: {auth_type}")
+            return {}
 
     # ─── SAP Endpoints ──────────────────────────────────────────
 

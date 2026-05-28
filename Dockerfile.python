@@ -4,12 +4,15 @@ WORKDIR /app
 
 # Install MySQL client libs for mysqlclient
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc default-libmysqlclient-dev pkg-config \
+    gcc default-libmysqlclient-dev pkg-config git curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python deps
 COPY sap-mes-cmsd-twin/requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the Data Requirements markdown (for RAG indexing)
+COPY Data_requirements_for_ASMG.md /app/
 
 # Copy cmsd-pydantic library (needed by CMSD twin service)
 COPY cmsd-pydantic-master/ ./cmsd-pydantic-master/

@@ -1,4 +1,23 @@
-"""Production Orders endpoints"""
+"""
+SAP Master Data — Production Orders & Order Lines.
+
+Serves production order definitions from SAP ERP. An Order is a manufacturing
+request specifying what to produce, how much, and by when. Each Order contains
+OrderLines that link a PartType to a ProcessPlan, forming the demand signal
+that drives CMSD simulation job generation.
+
+CMSD Entity Mapping:
+  - ``Order``        → CMSD **Order** (header: status, due date, priority)
+  - ``OrderLine``    → CMSD **Order Line** (line item: PartType + ProcessPlan + quantity)
+  - OrderLine → PartType      → resolves the CMSD Part Type to produce
+  - OrderLine → ProcessPlan   → resolves the CMSD Process Plan (routing recipe)
+
+Key Endpoints:
+  | Method | Path            | Description                                        |
+  |--------|-----------------|----------------------------------------------------|
+  | GET    | /orders         | List orders (filterable by status, priority)        |
+  | GET    | /orders/{id}    | Single order with all order lines                   |
+"""
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -16,6 +35,15 @@ def list_orders(
     priority: Optional[str] = Query(None, description="Filter by priority"),
     db: Session = Depends(get_db),
 ):
+    """List production Orders, optionally filtered by status or priority.
+
+    Returns ``count`` and ``orders`` array with identifier, status, due/release
+    dates, priority, and line_count.
+
+    CMSD relevance: Provides the demand catalog for the digital twin.
+    Each Order represents a unit of demand that drives job scheduling
+    and material reservation in CMSD simulation.
+    """
     q = db.query(Order)
     if status:
         q = q.filter(Order.status == status)
@@ -27,6 +55,16 @@ def list_orders(
 
 @router.get("/orders/{identifier}")
 def get_order(identifier: str, db: Session = Depends(get_db)):
+    """Get a single Order with all OrderLines.
+
+    Each OrderLine includes the PartType to produce, quantity, due/release
+    dates, status, and the ProcessPlan (routing) reference. This complete
+    demand-to-routing chain is essential for CMSD job creation.
+
+    CMSD relevance: Directly feeds CMSD Order → OrderLine entities.
+    The ProcessPlan reference on each line enables the orchestrator to
+    generate CMSD Jobs with the correct routing.
+    """
     o = db.query(Order).filter(Order.identifier == identifier).first()
     if not o:
         raise HTTPException(status_code=404, detail="Order not found")
@@ -47,6 +85,11 @@ def get_order(identifier: str, db: Session = Depends(get_db)):
 
 
 def _order_to_dict(o: Order) -> dict:
+    """Serialize an Order ORM model to a JSON-safe dict.
+
+    Includes order-level attributes: status, scheduling dates, priority,
+    and a count of child order lines for quick demand visibility.
+    """
     return {
         "identifier": o.identifier,
         "status": o.status,
