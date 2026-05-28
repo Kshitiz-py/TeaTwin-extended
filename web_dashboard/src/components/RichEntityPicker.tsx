@@ -353,52 +353,66 @@ const STATUS_STYLE: Record<string, React.CSSProperties> = {
 
 function FieldTable({ fields }: { fields: CatalogField[] }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column' }}>
+    <div style={{
+      display: 'grid', gridTemplateColumns: '170px 1fr auto auto',
+      gap: '0', fontSize: '12px',
+    }}>
+      {/* Header */}
+      <div style={{
+        padding: '6px 10px', color: '#64748b', fontSize: '10px',
+        fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px',
+        borderBottom: '1px solid #1e293b',
+      }}>Field</div>
+      <div style={{
+        padding: '6px 10px', color: '#64748b', fontSize: '10px',
+        fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px',
+        borderBottom: '1px solid #1e293b',
+      }}>Type</div>
+      <div style={{
+        padding: '6px 10px', color: '#64748b', fontSize: '10px',
+        fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px',
+        borderBottom: '1px solid #1e293b',
+      }}>Status</div>
+      <div style={{
+        padding: '6px 10px', color: '#64748b', fontSize: '10px',
+        fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px',
+        borderBottom: '1px solid #1e293b',
+      }}>Description</div>
+
       {fields.map((f, i) => {
         let statusKey: string;
         let statusLabel: string;
         if (f.is_reference) {
-          statusKey = 'reference';
-          statusLabel = 'reference';
+          statusKey = 'reference'; statusLabel = 'reference';
         } else if (f.required && !f.has_default) {
-          statusKey = 'required';
-          statusLabel = 'required';
+          statusKey = 'required'; statusLabel = 'required';
         } else if (f.has_default) {
-          statusKey = 'defaulted';
-          statusLabel = 'has default';
+          statusKey = 'defaulted'; statusLabel = 'has default';
         } else {
-          statusKey = 'optional';
-          statusLabel = 'optional';
+          statusKey = 'optional'; statusLabel = 'optional';
         }
+        const rowBg = i % 2 === 0 ? 'transparent' : 'rgba(15,23,42,0.4)';
         return (
-          <div key={f.name} style={{
-            display: 'flex', alignItems: 'center', gap: '12px',
-            padding: '6px 10px',
-            background: i % 2 === 0 ? 'transparent' : 'rgba(15,23,42,0.5)',
-            borderRadius: '6px',
-          }}>
+          <div key={f.name} style={{ display: 'contents' }}>
             <code style={{
+              padding: '6px 10px', background: rowBg,
               color: f.required && !f.has_default ? '#fca5a5' : '#e2e8f0',
               fontFamily: 'monospace', fontSize: '12px', fontWeight: 500,
-              minWidth: '150px', flexShrink: 0,
-            }}>
-              {f.name}
-            </code>
+            }}>{f.name}</code>
             <code style={{
+              padding: '6px 10px', background: rowBg,
               color: '#64748b', fontFamily: 'monospace', fontSize: '11px',
-              minWidth: '110px', flexShrink: 0,
+            }}>{f.type}</code>
+            <div style={{ padding: '4px 10px', background: rowBg, display: 'flex', alignItems: 'center' }}>
+              <span style={STATUS_STYLE[statusKey]}>{statusLabel}</span>
+            </div>
+            <div style={{
+              padding: '6px 10px', background: rowBg,
+              color: '#64748b', fontSize: '11px',
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const,
             }}>
-              {f.type}
-            </code>
-            <span style={STATUS_STYLE[statusKey]}>{statusLabel}</span>
-            {f.description && (
-              <span style={{
-                color: '#64748b', fontSize: '11px', flex: 1,
-                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const,
-              }}>
-                {f.description}
-              </span>
-            )}
+              {f.description || ''}
+            </div>
           </div>
         );
       })}
