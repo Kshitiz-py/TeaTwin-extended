@@ -74,8 +74,13 @@ class LLMClient:
     def chat(self, messages, temperature=0.1, stream=False, max_tokens=4096):
         return self._manager.chat(messages, temperature, stream, max_tokens)
 
-    def chat_json(self, system_prompt, user_prompt, temperature=0.0):
-        return self._manager.chat_json(system_prompt, user_prompt, temperature)
+    def chat_json(self, system_prompt, user_prompt, temperature=0.0, max_tokens=4096):
+        return self._manager.chat_json(system_prompt, user_prompt, temperature, max_tokens)
+
+    @property
+    def last_usage(self) -> dict[str, int]:
+        """Return token usage from the most recent chat completion (if available)."""
+        return self._manager.last_usage
 
     def list_models(self) -> list[dict[str, str]]:
         """List models from the currently configured chat provider."""

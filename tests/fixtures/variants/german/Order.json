@@ -1,0 +1,37 @@
+{
+  "count": 4,
+  "orders": [
+    {
+      "kennung": "ORD-2026-001",
+      "status": "released",
+      "faelligkeitsdatum": "2026-05-20T00:00:00",
+      "freigabedatum": "2026-05-10T06:00:00",
+      "prioritaet": "high",
+      "positionsanzahl": 2
+    },
+    {
+      "kennung": "ORD-2026-002",
+      "status": "released",
+      "faelligkeitsdatum": "2026-05-22T00:00:00",
+      "freigabedatum": "2026-05-12T06:00:00",
+      "prioritaet": "medium",
+      "positionsanzahl": 1
+    },
+    {
+      "kennung": "ORD-2026-003",
+      "status": "released",
+      "faelligkeitsdatum": "2026-05-25T00:00:00",
+      "freigabedatum": "2026-05-13T06:00:00",
+      "prioritaet": "medium",
+      "positionsanzahl": 1
+    },
+    {
+      "kennung": "ORD-2026-004",
+      "status": "created",
+      "faelligkeitsdatum": "2026-06-01T00:00:00",
+      "freigabedatum": "2026-05-20T06:00:00",
+      "prioritaet": "low",
+      "positionsanzahl": 1
+    }
+  ]
+}

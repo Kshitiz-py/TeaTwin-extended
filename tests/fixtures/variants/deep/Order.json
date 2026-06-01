@@ -1,0 +1,45 @@
+{
+  "status": "success",
+  "data": {
+    "payload": {
+      "items": [
+        {
+          "identifier": "ORD-2026-001",
+          "status": "released",
+          "due_date": "2026-05-20T00:00:00",
+          "release_date": "2026-05-10T06:00:00",
+          "priority": "high",
+          "line_count": 2
+        },
+        {
+          "identifier": "ORD-2026-002",
+          "status": "released",
+          "due_date": "2026-05-22T00:00:00",
+          "release_date": "2026-05-12T06:00:00",
+          "priority": "medium",
+          "line_count": 1
+        },
+        {
+          "identifier": "ORD-2026-003",
+          "status": "released",
+          "due_date": "2026-05-25T00:00:00",
+          "release_date": "2026-05-13T06:00:00",
+          "priority": "medium",
+          "line_count": 1
+        },
+        {
+          "identifier": "ORD-2026-004",
+          "status": "created",
+          "due_date": "2026-06-01T00:00:00",
+          "release_date": "2026-05-20T06:00:00",
+          "priority": "low",
+          "line_count": 1
+        }
+      ]
+    },
+    "metadata": {
+      "version": "2.1",
+      "generated_at": "2026-05-28T10:00:00Z"
+    }
+  }
+}

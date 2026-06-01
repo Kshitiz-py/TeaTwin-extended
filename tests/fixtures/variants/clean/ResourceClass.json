@@ -1,0 +1,161 @@
+{
+  "count": 13,
+  "resource_classes": [
+    {
+      "identifier": "RC-CNC-MILL",
+      "name": "CNC Milling Machines",
+      "description": "5-axis CNC milling centers",
+      "resource_type": "machine",
+      "hourly_rate": 85.0,
+      "size": {
+        "length": 4000.0,
+        "width": 3000.0,
+        "height": 2500.0
+      }
+    },
+    {
+      "identifier": "RC-CNC-LATHE",
+      "name": "CNC Turning Centers",
+      "description": "CNC lathe machines",
+      "resource_type": "machine",
+      "hourly_rate": 75.0,
+      "size": {
+        "length": 3500.0,
+        "width": 2000.0,
+        "height": 2000.0
+      }
+    },
+    {
+      "identifier": "RC-STAMPING",
+      "name": "Stamping Presses",
+      "description": "Hydraulic stamping presses",
+      "resource_type": "machine",
+      "hourly_rate": 65.0,
+      "size": {
+        "length": 5000.0,
+        "width": 3000.0,
+        "height": 3500.0
+      }
+    },
+    {
+      "identifier": "RC-INJECTION",
+      "name": "Injection Molding Machines",
+      "description": "Plastic injection molding",
+      "resource_type": "machine",
+      "hourly_rate": 55.0,
+      "size": {
+        "length": 4500.0,
+        "width": 2500.0,
+        "height": 3000.0
+      }
+    },
+    {
+      "identifier": "RC-PICK-PLACE",
+      "name": "Pick & Place Robots",
+      "description": "Automated pick and place stations",
+      "resource_type": "station",
+      "hourly_rate": 40.0,
+      "size": {
+        "length": 2000.0,
+        "width": 1500.0,
+        "height": 2000.0
+      }
+    },
+    {
+      "identifier": "RC-ASSEMBLY",
+      "name": "Assembly Stations",
+      "description": "Manual/semi-automated assembly",
+      "resource_type": "station",
+      "hourly_rate": 35.0,
+      "size": {
+        "length": 3000.0,
+        "width": 2000.0,
+        "height": 2000.0
+      }
+    },
+    {
+      "identifier": "RC-TESTING",
+      "name": "Testing Stations",
+      "description": "Quality testing equipment",
+      "resource_type": "station",
+      "hourly_rate": 50.0,
+      "size": {
+        "length": 2000.0,
+        "width": 1500.0,
+        "height": 1800.0
+      }
+    },
+    {
+      "identifier": "RC-CONVEYOR",
+      "name": "Conveyor Systems",
+      "description": "Belt/roller conveyors",
+      "resource_type": "conveyor",
+      "hourly_rate": 5.0,
+      "size": {
+        "length": null,
+        "width": null,
+        "height": null
+      }
+    },
+    {
+      "identifier": "RC-BUFFER",
+      "name": "Buffer/Storage",
+      "description": "Intermediate storage buffers",
+      "resource_type": "buffer",
+      "hourly_rate": 2.0,
+      "size": {
+        "length": 3000.0,
+        "width": 2000.0,
+        "height": 1500.0
+      }
+    },
+    {
+      "identifier": "RC-OPERATOR",
+      "name": "Human Operators",
+      "description": "Skilled manufacturing operators",
+      "resource_type": "employee",
+      "hourly_rate": 28.0,
+      "size": {
+        "length": null,
+        "width": null,
+        "height": null
+      }
+    },
+    {
+      "identifier": "RC-TRANSPORTER",
+      "name": "Forklift/AGV",
+      "description": "Material transport vehicles",
+      "resource_type": "transporter",
+      "hourly_rate": 20.0,
+      "size": {
+        "length": 2500.0,
+        "width": 1200.0,
+        "height": 2200.0
+      }
+    },
+    {
+      "identifier": "RC-SOURCE",
+      "name": "Raw Material Source",
+      "description": "Input point for raw materials",
+      "resource_type": "source",
+      "hourly_rate": 0.0,
+      "size": {
+        "length": 2000.0,
+        "width": 1000.0,
+        "height": 1500.0
+      }
+    },
+    {
+      "identifier": "RC-SINK",
+      "name": "Finished Goods Sink",
+      "description": "Output point for finished goods",
+      "resource_type": "sink",
+      "hourly_rate": 0.0,
+      "size": {
+        "length": 2000.0,
+        "width": 1000.0,
+        "height": 1500.0
+      }
+    }
+  ]
+}

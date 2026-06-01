@@ -1,0 +1,200 @@
+{
+  "count": 15,
+  "part_types": [
+    {
+      "kennung": "PT-RAW-001",
+      "bezeichnung": "Steel Block 100mm",
+      "beschreibung": "Raw steel block for machining",
+      "abmessungen": {
+        "laenge": 100.0,
+        "breite": 100.0,
+        "hoehe": 50.0
+      },
+      "gewicht_kg": 3.925,
+      "farbe": "gray",
+      "3d_form": "box"
+    },
+    {
+      "kennung": "PT-RAW-002",
+      "bezeichnung": "Aluminum Sheet 200mm",
+      "beschreibung": "Aluminum sheet for stamping",
+      "abmessungen": {
+        "laenge": 200.0,
+        "breite": 150.0,
+        "hoehe": 2.0
+      },
+      "gewicht_kg": 0.162,
+      "farbe": "silver",
+      "3d_form": "box"
+    },
+    {
+      "kennung": "PT-RAW-003",
+      "bezeichnung": "Plastic Granulate",
+      "beschreibung": "Raw plastic granulate for injection molding",
+      "abmessungen": {
+        "laenge": null,
+        "breite": null,
+        "hoehe": null
+      },
+      "gewicht_kg": null,
+      "farbe": "white",
+      "3d_form": "granulate"
+    },
+    {
+      "kennung": "PT-RAW-004",
+      "bezeichnung": "Steel Rod 500mm",
+      "beschreibung": "Steel rod for turning",
+      "abmessungen": {
+        "laenge": 500.0,
+        "breite": 30.0,
+        "hoehe": 30.0
+      },
+      "gewicht_kg": 3.534,
+      "farbe": "gray",
+      "3d_form": "cylinder"
+    },
+    {
+      "kennung": "PT-RAW-005",
+      "bezeichnung": "Electronic PCB Blank",
+      "beschreibung": "Bare PCB for assembly",
+      "abmessungen": {
+        "laenge": 100.0,
+        "breite": 80.0,
+        "hoehe": 1.6
+      },
+      "gewicht_kg": 0.035,
+      "farbe": "green",
+      "3d_form": "box"
+    },
+    {
+      "kennung": "PT-RAW-006",
+      "bezeichnung": "Bearing 6205",
+      "beschreibung": "Standard ball bearing",
+      "abmessungen": {
+        "laenge": 52.0,
+        "breite": 52.0,
+        "hoehe": 15.0
+      },
+      "gewicht_kg": 0.128,
+      "farbe": "silver",
+      "3d_form": "cylinder"
+    },
+    {
+      "kennung": "PT-RAW-007",
+      "bezeichnung": "M8 Bolt Set",
+      "beschreibung": "M8x30 bolt with nut and washer",
+      "abmessungen": {
+        "laenge": 30.0,
+        "breite": 8.0,
+        "hoehe": 8.0
+      },
+      "gewicht_kg": 0.018,
+      "farbe": "silver",
+      "3d_form": "cylinder"
+    },
+    {
+      "kennung": "PT-RAW-008",
+      "bezeichnung": "Oil Seal 30mm",
+      "beschreibung": "Rubber oil seal",
+      "abmessungen": {
+        "laenge": 30.0,
+        "breite": 30.0,
+        "hoehe": 7.0
+      },
+      "gewicht_kg": 0.005,
+      "farbe": "black",
+      "3d_form": "cylinder"
+    },
+    {
+      "kennung": "PT-INT-001",
+      "bezeichnung": "Machined Housing",
+      "beschreibung": "Milled steel housing",
+      "abmessungen": {
+        "laenge": 150.0,
+        "breite": 120.0,
+        "hoehe": 80.0
+      },
+      "gewicht_kg": 4.5,
+      "farbe": "gray",
+      "3d_form": "box"
+    },
+    {
+      "kennung": "PT-INT-002",
+      "bezeichnung": "Stamped Cover Plate",
+      "beschreibung": "Stamped aluminum cover",
+      "abmessungen": {
+        "laenge": 180.0,
+        "breite": 130.0,
+        "hoehe": 1.5
+      },
+      "gewicht_kg": 0.14,
+      "farbe": "silver",
+      "3d_form": "box"
+    },
+    {
+      "kennung": "PT-INT-003",
+      "bezeichnung": "Injection Molded Casing",
+      "beschreibung": "Plastic casing for electronics",
+      "abmessungen": {
+        "laenge": 200.0,
+        "breite": 120.0,
+        "hoehe": 60.0
+      },
+      "gewicht_kg": 0.25,
+      "farbe": "white",
+      "3d_form": "box"
+    },
+    {
+      "kennung": "PT-INT-004",
+      "bezeichnung": "Turned Shaft Assembly",
+      "beschreibung": "Precision turned shaft with bearing seat",
+      "abmessungen": {
+        "laenge": 300.0,
+        "breite": 25.0,
+        "hoehe": 25.0
+      },
+      "gewicht_kg": 1.2,
+      "farbe": "gray",
+      "3d_form": "cylinder"
+    },
+    {
+      "kennung": "PT-INT-005",
+      "bezeichnung": "Assembled PCB",
+      "beschreibung": "PCB with components soldered",
+      "abmessungen": {
+        "laenge": 100.0,
+        "breite": 80.0,
+        "hoehe": 25.0
+      },
+      "gewicht_kg": 0.08,
+      "farbe": "green",
+      "3d_form": "box"
+    },
+    {
+      "kennung": "PT-FG-001",
+      "bezeichnung": "Electric Motor Assembly 2kW",
+      "beschreibung": "Final assembled 2kW electric motor",
+      "abmessungen": {
+        "laenge": 350.0,
+        "breite": 200.0,
+        "hoehe": 200.0
+      },
+      "gewicht_kg": 15.0,
+      "farbe": "blue",
+      "3d_form": "cylinder"
+    },
+    {
+      "kennung": "PT-FG-002",
+      "bezeichnung": "Pump Unit Complete",
+      "beschreibung": "Final assembled pump unit",
+      "abmessungen": {
+        "laenge": 400.0,
+        "breite": 250.0,
+        "hoehe": 250.0
+      },
+      "gewicht_kg": 22.0,
+      "farbe": "red",
+      "3d_form": "box"
+    }
+  ]
+}

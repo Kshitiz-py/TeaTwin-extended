@@ -1,0 +1,841 @@
+{
+  "metadata": {
+    "generated_at": "2026-05-29T10:12:46.892498+00:00",
+    "harness_version": "v2",
+    "ai_agent_url": "http://localhost:8003/api/agent/v1",
+    "models_tested": [
+      "deepseek-flash"
+    ],
+    "model_status": {
+      "deepseek-flash": true
+    },
+    "variants_tested": [
+      "clean",
+      "legacy",
+      "german",
+      "deep"
+    ],
+    "entities_tested": [
+      "Resource",
+      "ResourceClass",
+      "Order",
+      "PartType"
+    ],
+    "rag_modes": [
+      "full_rag",
+      "no_rag"
+    ],
+    "instance_modes": [
+      "single",
+      "multi"
+    ],
+    "runs_per_experiment": 5,
+    "total_experiments": 320,
+    "successful": 40,
+    "field_type_classification": {
+      "Resource": {
+        "string_fields": 7,
+        "numeric_fields": 7,
+        "null_prone_fields": 6
+      },
+      "ResourceClass": {
+        "string_fields": 5,
+        "numeric_fields": 1,
+        "null_prone_fields": 0
+      },
+      "Order": {
+        "string_fields": 4,
+        "numeric_fields": 0,
+        "null_prone_fields": 0
+      },
+      "PartType": {
+        "string_fields": 4,
+        "numeric_fields": 1,
+        "null_prone_fields": 0
+      }
+    }
+  },
+  "rag_by_model": {
+    "deepseek-flash_full_rag": {
+      "model": "deepseek-flash",
+      "rag_mode": "full_rag",
+      "experiments": 16,
+      "avg_accuracy": 88.4,
+      "string_acc": 94.0,
+      "numeric_acc": 68.3
+    },
+    "deepseek-flash_no_rag": {
+      "model": "deepseek-flash",
+      "rag_mode": "no_rag",
+      "experiments": 16,
+      "avg_accuracy": 95.0,
+      "string_acc": 97.5,
+      "numeric_acc": 94.0
+    }
+  },
+  "multi_instance_impact": {
+    "deepseek-flash_full_rag": {
+      "model": "deepseek-flash",
+      "rag_mode": "full_rag",
+      "single_accuracy": 75.8,
+      "multi_accuracy": 70.3,
+      "delta": -5.5
+    },
+    "deepseek-flash_no_rag": {
+      "model": "deepseek-flash",
+      "rag_mode": "no_rag",
+      "single_accuracy": 82.9,
+      "multi_accuracy": 83.5,
+      "delta": 0.6
+    }
+  },
+  "detail_stats": {
+    "deepseek-flash/clean/full_rag/single": {
+      "runs": 5,
+      "failures": 0,
+      "accuracy_mean": 96.0,
+      "accuracy_median": 100.0,
+      "accuracy_stdev": 8.9,
+      "accuracy_min": 80.0,
+      "accuracy_max": 100.0,
+      "time_mean": 17.6,
+      "time_stdev": 2.4,
+      "per_run_accuracies": [
+        100.0,
+        100.0,
+        80.0,
+        100.0,
+        100.0
+      ],
+      "per_run_times": [
+        19.3,
+        19.7,
+        13.7,
+        17.6,
+        17.5
+      ],
+      "string_accuracy_mean": 95.0,
+      "string_accuracy_stdev": 11.2,
+      "numeric_accuracy_mean": 100.0,
+      "numeric_accuracy_stdev": 0.0,
+      "prompt_tokens_mean": 1729,
+      "completion_tokens_mean": 2094.0,
+      "total_tokens_mean": 3823.0,
+      "sample_result": {
+        "entity": "PartType",
+        "variant": "clean",
+        "ground_truth_fields": 5,
+        "llm_total_proposals": 5,
+        "correct": 5,
+        "incorrect": 0,
+        "missed": 0,
+        "extra": 0,
+        "accuracy": 100.0,
+        "recall": 100.0,
+        "precision": 100.0,
+        "string_accuracy": 100.0,
+        "numeric_accuracy": 100.0,
+        "null_prone_accuracy": null,
+        "string_fields": 4,
+        "numeric_fields": 1,
+        "null_prone_fields": 0,
+        "confidence_distribution": {
+          "high": 4,
+          "medium": 1,
+          "low": 0,
+          "manual": 0,
+          "unknown": 0
+        },
+        "incorrect_details": [],
+        "missed_fields": [],
+        "elapsed_seconds": 19.3,
+        "rag_mode": "full_rag",
+        "instance_mode": "single",
+        "instance_count": 1,
+        "rag_context_length": 5359,
+        "prompt_tokens": 1729,
+        "completion_tokens": 2338,
+        "total_tokens": 4067,
+        "llm_inference_ms": 18015,
+        "overhead_ms": 0
+      }
+    },
+    "deepseek-flash/legacy/full_rag/single": {
+      "runs": 5,
+      "failures": 0,
+      "accuracy_mean": 68.0,
+      "accuracy_median": 60.0,
+      "accuracy_stdev": 17.9,
+      "accuracy_min": 60.0,
+      "accuracy_max": 100.0,
+      "time_mean": 19.8,
+      "time_stdev": 3.2,
+      "per_run_accuracies": [
+        100.0,
+        60.0,
+        60.0,
+        60.0,
+        60.0
+      ],
+      "per_run_times": [
+        16.2,
+        16.8,
+        21.1,
+        21.4,
+        23.5
+      ],
+      "string_accuracy_mean": 80.0,
+      "string_accuracy_stdev": 11.2,
+      "numeric_accuracy_mean": 20.0,
+      "numeric_accuracy_stdev": 44.7,
+      "prompt_tokens_mean": 1746,
+      "completion_tokens_mean": 2556.0,
+      "total_tokens_mean": 4302.0,
+      "sample_result": {
+        "entity": "PartType",
+        "variant": "legacy",
+        "ground_truth_fields": 5,
+        "llm_total_proposals": 5,
+        "correct": 5,
+        "incorrect": 0,
+        "missed": 0,
+        "extra": 0,
+        "accuracy": 100.0,
+        "recall": 100.0,
+        "precision": 100.0,
+        "string_accuracy": 100.0,
+        "numeric_accuracy": 100.0,
+        "null_prone_accuracy": null,
+        "string_fields": 4,
+        "numeric_fields": 1,
+        "null_prone_fields": 0,
+        "confidence_distribution": {
+          "high": 4,
+          "medium": 1,
+          "low": 0,
+          "manual": 0,
+          "unknown": 0
+        },
+        "incorrect_details": [],
+        "missed_fields": [],
+        "elapsed_seconds": 16.2,
+        "rag_mode": "full_rag",
+        "instance_mode": "single",
+        "instance_count": 1,
+        "rag_context_length": 5670,
+        "prompt_tokens": 1746,
+        "completion_tokens": 2001,
+        "total_tokens": 3747,
+        "llm_inference_ms": 14943,
+        "overhead_ms": 0
+      }
+    },
+    "deepseek-flash/german/full_rag/single": {
+      "runs": 5,
+      "failures": 0,
+      "accuracy_mean": 68.0,
+      "accuracy_median": 60.0,
+      "accuracy_stdev": 17.9,
+      "accuracy_min": 60.0,
+      "accuracy_max": 100.0,
+      "time_mean": 20.0,
+      "time_stdev": 3.5,
+      "per_run_accuracies": [
+        60.0,
+        60.0,
+        100.0,
+        60.0,
+        60.0
+      ],
+      "per_run_times": [
+        15.1,
+        18.2,
+        21.6,
+        24.1,
+        21.0
+      ],
+      "string_accuracy_mean": 80.0,
+      "string_accuracy_stdev": 11.2,
+      "numeric_accuracy_mean": 20.0,
+      "numeric_accuracy_stdev": 44.7,
+      "prompt_tokens_mean": 1761,
+      "completion_tokens_mean": 2520.0,
+      "total_tokens_mean": 4281.0,
+      "sample_result": {
+        "entity": "PartType",
+        "variant": "german",
+        "ground_truth_fields": 5,
+        "llm_total_proposals": 12,
+        "correct": 3,
+        "incorrect": 0,
+        "missed": 2,
+        "extra": 9,
+        "accuracy": 60.0,
+        "recall": 60.0,
+        "precision": 100.0,
+        "string_accuracy": 75.0,
+        "numeric_accuracy": 0.0,
+        "null_prone_accuracy": null,
+        "string_fields": 4,
+        "numeric_fields": 1,
+        "null_prone_fields": 0,
+        "confidence_distribution": {
+          "high": 7,
+          "medium": 0,
+          "low": 5,
+          "manual": 0,
+          "unknown": 0
+        },
+        "incorrect_details": [],
+        "missed_fields": [
+          {
+            "field": "weight",
+            "expected": "gewicht_kg",
+            "field_type": "numeric"
+          },
+          {
+            "field": "size",
+            "expected": "abmessungen",
+            "field_type": "string"
+          }
+        ],
+        "elapsed_seconds": 15.1,
+        "rag_mode": "full_rag",
+        "instance_mode": "single",
+        "instance_count": 1,
+        "rag_context_length": 5670,
+        "prompt_tokens": 1761,
+        "completion_tokens": 1961,
+        "total_tokens": 3722,
+        "llm_inference_ms": 14493,
+        "overhead_ms": 0
+      }
+    },
+    "deepseek-flash/deep/full_rag/single": {
+      "runs": 5,
+      "failures": 0,
+      "accuracy_mean": 68.0,
+      "accuracy_median": 60.0,
+      "accuracy_stdev": 17.9,
+      "accuracy_min": 60.0,
+      "accuracy_max": 100.0,
+      "time_mean": 21.4,
+      "time_stdev": 4.2,
+      "per_run_accuracies": [
+        60.0,
+        60.0,
+        100.0,
+        60.0,
+        60.0
+      ],
+      "per_run_times": [
+        17.0,
+        17.5,
+        21.2,
+        25.0,
+        26.1
+      ],
+      "string_accuracy_mean": 80.0,
+      "string_accuracy_stdev": 11.2,
+      "numeric_accuracy_mean": 20.0,
+      "numeric_accuracy_stdev": 44.7,
+      "prompt_tokens_mean": 1729,
+      "completion_tokens_mean": 2713,
+      "total_tokens_mean": 4442,
+      "sample_result": {
+        "entity": "PartType",
+        "variant": "deep",
+        "ground_truth_fields": 5,
+        "llm_total_proposals": 7,
+        "correct": 3,
+        "incorrect": 0,
+        "missed": 2,
+        "extra": 4,
+        "accuracy": 60.0,
+        "recall": 60.0,
+        "precision": 100.0,
+        "string_accuracy": 75.0,
+        "numeric_accuracy": 0.0,
+        "null_prone_accuracy": null,
+        "string_fields": 4,
+        "numeric_fields": 1,
+        "null_prone_fields": 0,
+        "confidence_distribution": {
+          "high": 6,
+          "medium": 1,
+          "low": 0,
+          "manual": 0,
+          "unknown": 0
+        },
+        "incorrect_details": [],
+        "missed_fields": [
+          {
+            "field": "weight",
+            "expected": "weight_kg",
+            "field_type": "numeric"
+          },
+          {
+            "field": "size",
+            "expected": "size",
+            "field_type": "string"
+          }
+        ],
+        "elapsed_seconds": 17.0,
+        "rag_mode": "full_rag",
+        "instance_mode": "single",
+        "instance_count": 1,
+        "rag_context_length": 5670,
+        "prompt_tokens": 1729,
+        "completion_tokens": 2292,
+        "total_tokens": 4021,
+        "llm_inference_ms": 16177,
+        "overhead_ms": 0
+      }
+    },
+    "deepseek-flash/clean/no_rag/single": {
+      "runs": 5,
+      "failures": 0,
+      "accuracy_mean": 96.0,
+      "accuracy_median": 100.0,
+      "accuracy_stdev": 8.9,
+      "accuracy_min": 80.0,
+      "accuracy_max": 100.0,
+      "time_mean": 13.5,
+      "time_stdev": 2.5,
+      "per_run_accuracies": [
+        80.0,
+        100.0,
+        100.0,
+        100.0,
+        100.0
+      ],
+      "per_run_times": [
+        11.1,
+        12.0,
+        14.9,
+        12.1,
+        17.2
+      ],
+      "string_accuracy_mean": 95.0,
+      "string_accuracy_stdev": 11.2,
+      "numeric_accuracy_mean": 100.0,
+      "numeric_accuracy_stdev": 0.0,
+      "prompt_tokens_mean": 1298,
+      "completion_tokens_mean": 1846.0,
+      "total_tokens_mean": 3144.0,
+      "sample_result": {
+        "entity": "PartType",
+        "variant": "clean",
+        "ground_truth_fields": 5,
+        "llm_total_proposals": 11,
+        "correct": 4,
+        "incorrect": 0,
+        "missed": 1,
+        "extra": 7,
+        "accuracy": 80.0,
+        "recall": 80.0,
+        "precision": 100.0,
+        "string_accuracy": 75.0,
+        "numeric_accuracy": 100.0,
+        "null_prone_accuracy": null,
+        "string_fields": 4,
+        "numeric_fields": 1,
+        "null_prone_fields": 0,
+        "confidence_distribution": {
+          "high": 7,
+          "medium": 0,
+          "low": 4,
+          "manual": 0,
+          "unknown": 0
+        },
+        "incorrect_details": [],
+        "missed_fields": [
+          {
+            "field": "size",
+            "expected": "size",
+            "field_type": "string"
+          }
+        ],
+        "elapsed_seconds": 11.1,
+        "rag_mode": "no_rag",
+        "instance_mode": "single",
+        "instance_count": 1,
+        "rag_context_length": 0,
+        "prompt_tokens": 1298,
+        "completion_tokens": 1526,
+        "total_tokens": 2824,
+        "llm_inference_ms": 11119,
+        "overhead_ms": 0
+      }
+    },
+    "deepseek-flash/legacy/no_rag/single": {
+      "runs": 5,
+      "failures": 0,
+      "accuracy_mean": 96.0,
+      "accuracy_median": 100.0,
+      "accuracy_stdev": 8.9,
+      "accuracy_min": 80.0,
+      "accuracy_max": 100.0,
+      "time_mean": 16.8,
+      "time_stdev": 3.6,
+      "per_run_accuracies": [
+        80.0,
+        100.0,
+        100.0,
+        100.0,
+        100.0
+      ],
+      "per_run_times": [
+        12.1,
+        16.3,
+        17.8,
+        15.8,
+        22.0
+      ],
+      "string_accuracy_mean": 95.0,
+      "string_accuracy_stdev": 11.2,
+      "numeric_accuracy_mean": 100.0,
+      "numeric_accuracy_stdev": 0.0,
+      "prompt_tokens_mean": 1315,
+      "completion_tokens_mean": 2228,
+      "total_tokens_mean": 3543,
+      "sample_result": {
+        "entity": "PartType",
+        "variant": "legacy",
+        "ground_truth_fields": 5,
+        "llm_total_proposals": 14,
+        "correct": 4,
+        "incorrect": 1,
+        "missed": 0,
+        "extra": 9,
+        "accuracy": 80.0,
+        "recall": 100.0,
+        "precision": 80.0,
+        "string_accuracy": 75.0,
+        "numeric_accuracy": 100.0,
+        "null_prone_accuracy": null,
+        "string_fields": 4,
+        "numeric_fields": 1,
+        "null_prone_fields": 0,
+        "confidence_distribution": {
+          "high": 9,
+          "medium": 2,
+          "low": 3,
+          "manual": 0,
+          "unknown": 0
+        },
+        "incorrect_details": [
+          {
+            "field": "size",
+            "expected": "FLD019",
+            "actual": "size",
+            "confidence": "medium",
+            "field_type": "string"
+          }
+        ],
+        "missed_fields": [],
+        "elapsed_seconds": 12.1,
+        "rag_mode": "no_rag",
+        "instance_mode": "single",
+        "instance_count": 1,
+        "rag_context_length": 0,
+        "prompt_tokens": 1315,
+        "completion_tokens": 1690,
+        "total_tokens": 3005,
+        "llm_inference_ms": 12114,
+        "overhead_ms": 0
+      }
+    },
+    "deepseek-flash/german/no_rag/single": {
+      "runs": 5,
+      "failures": 0,
+      "accuracy_mean": 96.0,
+      "accuracy_median": 100.0,
+      "accuracy_stdev": 8.9,
+      "accuracy_min": 80.0,
+      "accuracy_max": 100.0,
+      "time_mean": 16.0,
+      "time_stdev": 1.7,
+      "per_run_accuracies": [
+        100.0,
+        100.0,
+        100.0,
+        100.0,
+        80.0
+      ],
+      "per_run_times": [
+        14.7,
+        13.7,
+        17.1,
+        17.1,
+        17.6
+      ],
+      "string_accuracy_mean": 95.0,
+      "string_accuracy_stdev": 11.2,
+      "numeric_accuracy_mean": 100.0,
+      "numeric_accuracy_stdev": 0.0,
+      "prompt_tokens_mean": 1330,
+      "completion_tokens_mean": 2180.0,
+      "total_tokens_mean": 3510.0,
+      "sample_result": {
+        "entity": "PartType",
+        "variant": "german",
+        "ground_truth_fields": 5,
+        "llm_total_proposals": 9,
+        "correct": 5,
+        "incorrect": 0,
+        "missed": 0,
+        "extra": 4,
+        "accuracy": 100.0,
+        "recall": 100.0,
+        "precision": 100.0,
+        "string_accuracy": 100.0,
+        "numeric_accuracy": 100.0,
+        "null_prone_accuracy": null,
+        "string_fields": 4,
+        "numeric_fields": 1,
+        "null_prone_fields": 0,
+        "confidence_distribution": {
+          "high": 5,
+          "medium": 0,
+          "low": 4,
+          "manual": 0,
+          "unknown": 0
+        },
+        "incorrect_details": [],
+        "missed_fields": [],
+        "elapsed_seconds": 14.7,
+        "rag_mode": "no_rag",
+        "instance_mode": "single",
+        "instance_count": 1,
+        "rag_context_length": 0,
+        "prompt_tokens": 1330,
+        "completion_tokens": 2065,
+        "total_tokens": 3395,
+        "llm_inference_ms": 14659,
+        "overhead_ms": 0
+      }
+    },
+    "deepseek-flash/deep/no_rag/single": {
+      "runs": 5,
+      "failures": 0,
+      "accuracy_mean": 100.0,
+      "accuracy_median": 100.0,
+      "accuracy_stdev": 0.0,
+      "accuracy_min": 100.0,
+      "accuracy_max": 100.0,
+      "time_mean": 18.6,
+      "time_stdev": 5.0,
+      "per_run_accuracies": [
+        100.0,
+        100.0,
+        100.0,
+        100.0,
+        100.0
+      ],
+      "per_run_times": [
+        13.5,
+        14.4,
+        18.6,
+        20.4,
+        26.0
+      ],
+      "string_accuracy_mean": 100.0,
+      "string_accuracy_stdev": 0.0,
+      "numeric_accuracy_mean": 100.0,
+      "numeric_accuracy_stdev": 0.0,
+      "prompt_tokens_mean": 1298,
+      "completion_tokens_mean": 2428.0,
+      "total_tokens_mean": 3726.0,
+      "sample_result": {
+        "entity": "PartType",
+        "variant": "deep",
+        "ground_truth_fields": 5,
+        "llm_total_proposals": 5,
+        "correct": 5,
+        "incorrect": 0,
+        "missed": 0,
+        "extra": 0,
+        "accuracy": 100.0,
+        "recall": 100.0,
+        "precision": 100.0,
+        "string_accuracy": 100.0,
+        "numeric_accuracy": 100.0,
+        "null_prone_accuracy": null,
+        "string_fields": 4,
+        "numeric_fields": 1,
+        "null_prone_fields": 0,
+        "confidence_distribution": {
+          "high": 5,
+          "medium": 0,
+          "low": 0,
+          "manual": 0,
+          "unknown": 0
+        },
+        "incorrect_details": [],
+        "missed_fields": [],
+        "elapsed_seconds": 13.5,
+        "rag_mode": "no_rag",
+        "instance_mode": "single",
+        "instance_count": 1,
+        "rag_context_length": 0,
+        "prompt_tokens": 1298,
+        "completion_tokens": 1801,
+        "total_tokens": 3099,
+        "llm_inference_ms": 13445,
+        "overhead_ms": 0
+      }
+    },
+    "deepseek-flash/legacy/full_rag/multi": {
+      "runs": 5,
+      "failures": 0,
+      "accuracy_mean": 68.0,
+      "accuracy_median": 60.0,
+      "accuracy_stdev": 17.9,
+      "accuracy_min": 60.0,
+      "accuracy_max": 100.0,
+      "time_mean": 28.4,
+      "time_stdev": 10.4,
+      "per_run_accuracies": [
+        60.0,
+        60.0,
+        60.0,
+        60.0,
+        100.0
+      ],
+      "per_run_times": [
+        15.4,
+        22.6,
+        26.3,
+        39.8,
+        38.0
+      ],
+      "string_accuracy_mean": 80.0,
+      "string_accuracy_stdev": 11.2,
+      "numeric_accuracy_mean": 20.0,
+      "numeric_accuracy_stdev": 44.7,
+      "prompt_tokens_mean": 1746,
+      "completion_tokens_mean": 3639.0,
+      "total_tokens_mean": 5385.0,
+      "sample_result": {
+        "entity": "PartType",
+        "variant": "legacy",
+        "ground_truth_fields": 5,
+        "llm_total_proposals": 11,
+        "correct": 3,
+        "incorrect": 0,
+        "missed": 2,
+        "extra": 8,
+        "accuracy": 60.0,
+        "recall": 60.0,
+        "precision": 100.0,
+        "string_accuracy": 75.0,
+        "numeric_accuracy": 0.0,
+        "null_prone_accuracy": null,
+        "string_fields": 4,
+        "numeric_fields": 1,
+        "null_prone_fields": 0,
+        "confidence_distribution": {
+          "high": 7,
+          "medium": 1,
+          "low": 3,
+          "manual": 0,
+          "unknown": 0
+        },
+        "incorrect_details": [],
+        "missed_fields": [
+          {
+            "field": "weight",
+            "expected": "FLD201",
+            "field_type": "numeric"
+          },
+          {
+            "field": "size",
+            "expected": "FLD019",
+            "field_type": "string"
+          }
+        ],
+        "elapsed_seconds": 15.4,
+        "rag_mode": "full_rag",
+        "instance_mode": "multi",
+        "instance_count": 15,
+        "rag_context_length": 5670,
+        "prompt_tokens": 1746,
+        "completion_tokens": 1949,
+        "total_tokens": 3695,
+        "llm_inference_ms": 14708,
+        "overhead_ms": 0
+      }
+    },
+    "deepseek-flash/legacy/no_rag/multi": {
+      "runs": 5,
+      "failures": 0,
+      "accuracy_mean": 92.0,
+      "accuracy_median": 100.0,
+      "accuracy_stdev": 11.0,
+      "accuracy_min": 80.0,
+      "accuracy_max": 100.0,
+      "time_mean": 22.1,
+      "time_stdev": 8.6,
+      "per_run_accuracies": [
+        100.0,
+        80.0,
+        80.0,
+        100.0,
+        100.0
+      ],
+      "per_run_times": [
+        9.2,
+        20.4,
+        21.8,
+        27.2,
+        32.0
+      ],
+      "string_accuracy_mean": 90.0,
+      "string_accuracy_stdev": 13.7,
+      "numeric_accuracy_mean": 100.0,
+      "numeric_accuracy_stdev": 0.0,
+      "prompt_tokens_mean": 1315,
+      "completion_tokens_mean": 2873,
+      "total_tokens_mean": 4188,
+      "sample_result": {
+        "entity": "PartType",
+        "variant": "legacy",
+        "ground_truth_fields": 5,
+        "llm_total_proposals": 9,
+        "correct": 5,
+        "incorrect": 0,
+        "missed": 0,
+        "extra": 4,
+        "accuracy": 100.0,
+        "recall": 100.0,
+        "precision": 100.0,
+        "string_accuracy": 100.0,
+        "numeric_accuracy": 100.0,
+        "null_prone_accuracy": null,
+        "string_fields": 4,
+        "numeric_fields": 1,
+        "null_prone_fields": 0,
+        "confidence_distribution": {
+          "high": 5,
+          "medium": 0,
+          "low": 4,
+          "manual": 0,
+          "unknown": 0
+        },
+        "incorrect_details": [],
+        "missed_fields": [],
+        "elapsed_seconds": 9.2,
+        "rag_mode": "no_rag",
+        "instance_mode": "multi",
+        "instance_count": 15,
+        "rag_context_length": 0,
+        "prompt_tokens": 1315,
+        "completion_tokens": 1296,
+        "total_tokens": 2611,
+        "llm_inference_ms": 9137,
+        "overhead_ms": 1
+      }
+    }
+  }
+}

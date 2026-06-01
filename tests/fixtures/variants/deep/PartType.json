@@ -1,0 +1,208 @@
+{
+  "status": "success",
+  "data": {
+    "payload": {
+      "items": [
+        {
+          "identifier": "PT-RAW-001",
+          "name": "Steel Block 100mm",
+          "description": "Raw steel block for machining",
+          "size": {
+            "length": 100.0,
+            "width": 100.0,
+            "height": 50.0
+          },
+          "weight_kg": 3.925,
+          "color": "gray",
+          "shape_3d": "box"
+        },
+        {
+          "identifier": "PT-RAW-002",
+          "name": "Aluminum Sheet 200mm",
+          "description": "Aluminum sheet for stamping",
+          "size": {
+            "length": 200.0,
+            "width": 150.0,
+            "height": 2.0
+          },
+          "weight_kg": 0.162,
+          "color": "silver",
+          "shape_3d": "box"
+        },
+        {
+          "identifier": "PT-RAW-003",
+          "name": "Plastic Granulate",
+          "description": "Raw plastic granulate for injection molding",
+          "size": {
+            "length": null,
+            "width": null,
+            "height": null
+          },
+          "weight_kg": null,
+          "color": "white",
+          "shape_3d": "granulate"
+        },
+        {
+          "identifier": "PT-RAW-004",
+          "name": "Steel Rod 500mm",
+          "description": "Steel rod for turning",
+          "size": {
+            "length": 500.0,
+            "width": 30.0,
+            "height": 30.0
+          },
+          "weight_kg": 3.534,
+          "color": "gray",
+          "shape_3d": "cylinder"
+        },
+        {
+          "identifier": "PT-RAW-005",
+          "name": "Electronic PCB Blank",
+          "description": "Bare PCB for assembly",
+          "size": {
+            "length": 100.0,
+            "width": 80.0,
+            "height": 1.6
+          },
+          "weight_kg": 0.035,
+          "color": "green",
+          "shape_3d": "box"
+        },
+        {
+          "identifier": "PT-RAW-006",
+          "name": "Bearing 6205",
+          "description": "Standard ball bearing",
+          "size": {
+            "length": 52.0,
+            "width": 52.0,
+            "height": 15.0
+          },
+          "weight_kg": 0.128,
+          "color": "silver",
+          "shape_3d": "cylinder"
+        },
+        {
+          "identifier": "PT-RAW-007",
+          "name": "M8 Bolt Set",
+          "description": "M8x30 bolt with nut and washer",
+          "size": {
+            "length": 30.0,
+            "width": 8.0,
+            "height": 8.0
+          },
+          "weight_kg": 0.018,
+          "color": "silver",
+          "shape_3d": "cylinder"
+        },
+        {
+          "identifier": "PT-RAW-008",
+          "name": "Oil Seal 30mm",
+          "description": "Rubber oil seal",
+          "size": {
+            "length": 30.0,
+            "width": 30.0,
+            "height": 7.0
+          },
+          "weight_kg": 0.005,
+          "color": "black",
+          "shape_3d": "cylinder"
+        },
+        {
+          "identifier": "PT-INT-001",
+          "name": "Machined Housing",
+          "description": "Milled steel housing",
+          "size": {
+            "length": 150.0,
+            "width": 120.0,
+            "height": 80.0
+          },
+          "weight_kg": 4.5,
+          "color": "gray",
+          "shape_3d": "box"
+        },
+        {
+          "identifier": "PT-INT-002",
+          "name": "Stamped Cover Plate",
+          "description": "Stamped aluminum cover",
+          "size": {
+            "length": 180.0,
+            "width": 130.0,
+            "height": 1.5
+          },
+          "weight_kg": 0.14,
+          "color": "silver",
+          "shape_3d": "box"
+        },
+        {
+          "identifier": "PT-INT-003",
+          "name": "Injection Molded Casing",
+          "description": "Plastic casing for electronics",
+          "size": {
+            "length": 200.0,
+            "width": 120.0,
+            "height": 60.0
+          },
+          "weight_kg": 0.25,
+          "color": "white",
+          "shape_3d": "box"
+        },
+        {
+          "identifier": "PT-INT-004",
+          "name": "Turned Shaft Assembly",
+          "description": "Precision turned shaft with bearing seat",
+          "size": {
+            "length": 300.0,
+            "width": 25.0,
+            "height": 25.0
+          },
+          "weight_kg": 1.2,
+          "color": "gray",
+          "shape_3d": "cylinder"
+        },
+        {
+          "identifier": "PT-INT-005",
+          "name": "Assembled PCB",
+          "description": "PCB with components soldered",
+          "size": {
+            "length": 100.0,
+            "width": 80.0,
+            "height": 25.0
+          },
+          "weight_kg": 0.08,
+          "color": "green",
+          "shape_3d": "box"
+        },
+        {
+          "identifier": "PT-FG-001",
+          "name": "Electric Motor Assembly 2kW",
+          "description": "Final assembled 2kW electric motor",
+          "size": {
+            "length": 350.0,
+            "width": 200.0,
+            "height": 200.0
+          },
+          "weight_kg": 15.0,
+          "color": "blue",
+          "shape_3d": "cylinder"
+        },
+        {
+          "identifier": "PT-FG-002",
+          "name": "Pump Unit Complete",
+          "description": "Final assembled pump unit",
+          "size": {
+            "length": 400.0,
+            "width": 250.0,
+            "height": 250.0
+          },
+          "weight_kg": 22.0,
+          "color": "red",
+          "shape_3d": "box"
+        }
+      ]
+    },
+    "metadata": {
+      "version": "2.1",
+      "generated_at": "2026-05-28T10:00:00Z"
+    }
+  }
+}

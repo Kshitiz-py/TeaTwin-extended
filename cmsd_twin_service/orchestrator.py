@@ -55,6 +55,9 @@ class CMSDOrchestrator:
         self._running = False
         self._task: asyncio.Task | None = None
 
+        # Analytics history for paper evaluation
+        self._analytics_history: list[dict] = []
+
     # ── Properties ─────────────────────────────────────────
 
     @property
@@ -190,6 +193,9 @@ class CMSDOrchestrator:
             preflight_result = {"passed": True, "warnings": []}
             if mapping_ids:
                 preflight_result = self.run_preflight(mapping_ids)
+
+            # ── Collect analytics for paper evaluation ──
+            self._collect_analytics(report)
 
             return {
                 "success": len(report.get("fetch_errors", [])) == 0 and len(report.get("relation_errors", [])) == 0,
@@ -408,6 +414,85 @@ class CMSDOrchestrator:
             "InventoryItem", "MaintenancePlan",
         }
         return sorted(all_entities - set(mapped_entities.keys()))
+
+    # ── Analytics for paper evaluation ─────────────────────
+
+    def _collect_analytics(self, report: dict):
+        """Collect analytics from a single run_once() cycle."""
+        snap = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "fetch_errors": len(report.get("fetch_errors", [])),
+            "field_warnings": len(report.get("field_warnings", [])),
+            "relation_errors": len(report.get("relation_errors", [])),
+            "entities_generated": report.get("entities", {}),
+        }
+        # Categorize field_warnings
+        type_coercion = 0
+        field_not_found = 0
+        for w in report.get("field_warnings", []):
+            reason = w.get("field", "")
+            if "constructor" in reason or "coerce" in reason.lower():
+                type_coercion += 1
+            else:
+                field_not_found += 1
+        snap["type_coercion_failures"] = type_coercion
+        snap["field_not_found"] = field_not_found
+        snap["dangling_references"] = len(report.get("relation_errors", []))
+        snap["api_unreachable"] = len(report.get("fetch_errors", []))
+        self._analytics_history.append(snap)
+        # Keep last 100 cycles
+        if len(self._analytics_history) > 100:
+            self._analytics_history = self._analytics_history[-100:]
+
+    def get_analytics(self) -> dict:
+        """Aggregate analytics across all recorded cycles."""
+        history = self._analytics_history
+        if not history:
+            return {"cycles": 0, "message": "No data yet. Run POST /refresh first."}
+
+        total_cycles = len(history)
+        total_type_coercion = sum(h.get("type_coercion_failures", 0) for h in history)
+        total_field_not_found = sum(h.get("field_not_found", 0) for h in history)
+        total_dangling_refs = sum(h.get("dangling_references", 0) for h in history)
+        total_api_unreachable = sum(h.get("api_unreachable", 0) for h in history)
+        total_fetch_errors = sum(h.get("fetch_errors", 0) for h in history)
+        total_field_warnings = sum(h.get("field_warnings", 0) for h in history)
+        total_relation_errors = sum(h.get("relation_errors", 0) for h in history)
+
+        # Entity generation totals from most recent cycle
+        last = history[-1]
+        entities = last.get("entities_generated", {})
+
+        return {
+            "cycles_recorded": total_cycles,
+            "entity_counts": entities,
+            "error_categories": {
+                "type_coercion_failures": {
+                    "total": total_type_coercion,
+                    "description": "Value could not be coerced to CMSD type (e.g. float -> Currency)",
+                },
+                "field_not_found": {
+                    "total": total_field_not_found,
+                    "description": "api_path did not resolve in API response",
+                },
+                "dangling_references": {
+                    "total": total_dangling_refs,
+                    "description": "Entity references a target that does not exist in the twin",
+                },
+                "api_unreachable": {
+                    "total": total_api_unreachable,
+                    "description": "Source API endpoint was unreachable after retries",
+                },
+            },
+            "totals": {
+                "fetch_errors": total_fetch_errors,
+                "field_warnings": total_field_warnings,
+                "relation_errors": total_relation_errors,
+                "all_errors": total_fetch_errors + total_field_warnings + total_relation_errors,
+            },
+            "latest_cycle_entities": entities,
+            "latest_cycle_timestamp": last["timestamp"],
+        }
 
     # ── Polling loop ───────────────────────────────────────
 

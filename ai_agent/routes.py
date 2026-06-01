@@ -61,6 +61,8 @@ class MappingAnalyzeRequest(BaseModel):
     endpoints: list[EndpointSpec] = []
     method: str = "GET"
     approved_payloads: list[ApprovedPayload] = []
+    skip_rag: bool = False  # If True, skip RAG retrieval (for ablation studies)
+    multi_instance: bool = False  # If True, treat raw_payload as list of instances for distribution analysis
 
 class MappingChatRequest(BaseModel):
     data_point_name: str
@@ -332,12 +334,20 @@ async def analyze_mapping(request: MappingAnalyzeRequest):
                 if ap.raw_payload is None:
                     continue
                 payload_analysis = api_explorer.analyze_payload(ap.raw_payload)
-                payload_analyses.append({
+                entry = {
                     "endpoint": ap.endpoint,
                     "source_label": ap.label or ap.endpoint,
                     "analysis": payload_analysis,
                     "raw_payload": ap.raw_payload,
-                })
+                }
+                # Multi-instance: raw_payload is a list of dicts — store for distribution analysis
+                if request.multi_instance and isinstance(ap.raw_payload, list):
+                    entry["raw_instances"] = ap.raw_payload
+                    entry["instance_count"] = len(ap.raw_payload)
+                    # analyze first instance for structure
+                    if len(ap.raw_payload) > 0:
+                        entry["analysis"] = api_explorer.analyze_payload(ap.raw_payload[0])
+                payload_analyses.append(entry)
                 all_endpoints_str.append(f"{ap.source_id}{ap.endpoint}")
         else:
             # ── Mode 2: Live-fetch from endpoints ──
@@ -379,30 +389,53 @@ async def analyze_mapping(request: MappingAnalyzeRequest):
         if not payload_analyses:
             raise HTTPException(400, "No valid payloads to analyze")
 
-        # Get RAG context
-        rag_context = await mapping_engine.analyze_rag(
-            data_point_name=request.data_point_name,
-            cmsd_entity=request.cmsd_entity,
-            api_endpoint=", ".join(all_endpoints_str),
-        )
-
-        # Propose mapping (single or multi)
-        if len(payload_analyses) == 1:
-            mapping = await mapping_engine.propose_mapping(
+        # Get RAG context (skip if ablation mode)
+        if request.skip_rag:
+            rag_context = ""
+        else:
+            rag_context = await mapping_engine.analyze_rag(
                 data_point_name=request.data_point_name,
                 cmsd_entity=request.cmsd_entity,
-                api_endpoint=all_endpoints_str[0],
-                payload_analysis=payload_analyses[0]["analysis"],
-                rag_context=rag_context,
+                api_endpoint=", ".join(all_endpoints_str),
+            )
+
+        # Propose mapping (single or multi) — run in thread to avoid
+        # sync httpx blocking the async event loop.
+        multi_instances = None
+        if request.multi_instance:
+            # Collect raw instances from the first approved payload
+            for pa in payload_analyses:
+                if pa.get("raw_instances"):
+                    multi_instances = pa["raw_instances"]
+                    break
+
+        if multi_instances:
+            mapping = await asyncio.to_thread(
+                mapping_engine.propose_mapping_multi_instance,
+                request.data_point_name,
+                request.cmsd_entity,
+                all_endpoints_str[0] if all_endpoints_str else "",
+                multi_instances,
+                rag_context,
+            )
+        elif len(payload_analyses) == 1:
+            mapping = await asyncio.to_thread(
+                mapping_engine.propose_mapping,
+                request.data_point_name,
+                request.cmsd_entity,
+                all_endpoints_str[0],
+                payload_analyses[0]["analysis"],
+                rag_context,
             )
         else:
             endpoint_labels = [pa["source_label"] for pa in payload_analyses]
-            mapping = await mapping_engine.propose_mapping_multi(
-                data_point_name=request.data_point_name,
-                cmsd_entity=request.cmsd_entity,
-                endpoint_labels=endpoint_labels,
-                payload_analyses=payload_analyses,
-                rag_context=rag_context,
+            mapping = await asyncio.to_thread(
+                mapping_engine.propose_mapping_multi,
+                request.data_point_name,
+                request.cmsd_entity,
+                endpoint_labels,
+                payload_analyses,
+                rag_context,
             )
 
         return {

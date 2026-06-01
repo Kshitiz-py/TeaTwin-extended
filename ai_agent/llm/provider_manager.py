@@ -182,12 +182,12 @@ class ProviderManager:
         embed_config: ProviderConfig | None = None,
     ) -> dict[str, Any]:
         """Configure chat and (optionally) embedding providers.
-        
+
         Args:
             chat_config: Configuration for the chat/LLM provider.
             embed_config: Configuration for the embedding provider.
                 If None, uses chat_config for both (if the provider supports it).
-        
+
         Returns:
             Dict with test results for chat (and embed if configured separately).
         """
@@ -271,8 +271,17 @@ class ProviderManager:
         system_prompt: str,
         user_prompt: str,
         temperature: float = 0.0,
+        max_tokens: int = 4096,
     ) -> dict[str, Any]:
-        return self.chat_provider.chat_json(system_prompt, user_prompt, temperature)
+        return self.chat_provider.chat_json(system_prompt, user_prompt, temperature, max_tokens)
+
+    @property
+    def last_usage(self) -> dict[str, int]:
+        """Return token usage from the most recent chat completion (if available)."""
+        provider = self._chat_provider
+        if provider and hasattr(provider, 'last_usage'):
+            return provider.last_usage
+        return {}
 
     def list_models(self) -> list[dict[str, str]]:
         """List available models from the currently configured chat provider."""

@@ -30,7 +30,7 @@ class Retriever:
 
         # Filter by collections if specified
         if collections:
-            results = [r for r in results if r.get("metadata", {}).get("collection") in collections]
+            results = [r for r in results if r and r.get("metadata", {}) and r.get("metadata", {}).get("collection") in collections]
 
         return results[:top_k]
 
@@ -59,16 +59,27 @@ class Retriever:
             for r in req_results:
                 context_parts.append(f"**Source**: {r['metadata'].get('header', 'Unknown')}\n{r['content'][:500]}")
 
-        # 2. Search CMSD schema for the entity
+        # 2. Search CMSD catalog for the entity (clean field reference, not raw source code)
         schema_results = self.retrieve(
-            f"CMSD schema definition for {cmsd_entity} class fields",
+            f"CMSD entity {cmsd_entity} fields types descriptions",
             top_k=3,
-            collections=["cmsd-schema"],
+            collections=["cmsd-catalog"],
         )
         if schema_results:
-            context_parts.append("### CMSD Schema Reference")
+            context_parts.append("### CMSD Field Reference (Catalog)")
             for r in schema_results:
-                context_parts.append(f"**File**: {r['metadata'].get('filename', 'Unknown')}\n{r['content'][:600]}")
+                context_parts.append(f"**Source**: {r['metadata'].get('header', r['metadata'].get('filename', 'CMSD Catalog'))}\n{r['content'][:1200]}")
+        else:
+            # Fallback to raw source code if catalog not available
+            schema_results = self.retrieve(
+                f"CMSD schema definition for {cmsd_entity} class fields",
+                top_k=3,
+                collections=["cmsd-schema"],
+            )
+            if schema_results:
+                context_parts.append("### CMSD Schema Reference")
+                for r in schema_results:
+                    context_parts.append(f"**File**: {r['metadata'].get('filename', 'Unknown')}\n{r['content'][:600]}")
 
         # 3. Search codebase for existing mapping patterns
         code_results = self.retrieve(
@@ -85,13 +96,13 @@ class Retriever:
         if api_endpoint:
             api_results = self.retrieve(
                 f"API endpoint implementation {api_endpoint} route handler",
-                top_k=2,
+                top_k=5,
                 collections=["api-docs"],
             )
             if api_results:
                 context_parts.append("### API Documentation")
                 for r in api_results:
-                    context_parts.append(f"**File**: {r['metadata'].get('filename', 'Unknown')}\n{r['content'][:400]}")
+                    context_parts.append(f"**File**: {r['metadata'].get('filename', 'Unknown')}\n{r['content'][:2000]}")
 
         return "\n\n".join(context_parts) if context_parts else "No relevant documents found in the knowledge base."
 

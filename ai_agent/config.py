@@ -45,12 +45,19 @@ DOC_SOURCES = [
         "collection": "data-requirements",
         "description": "Data requirements for automated simulation model generation (ASMG) — defines minimum data needed for CMSD twin",
     },
-    # ── CMSD Pydantic Schema (target: what we map TO) ───────
+    # ── CMSD Catalog (clean field reference — replaces raw source code) ──
+    {
+        "path": os.path.join(PROJECT_ROOT, "ai_agent", "cmsd_catalog.md"),
+        "type": "markdown",
+        "collection": "cmsd-catalog",
+        "description": "Clean CMSD entity catalog with field names, types, and plain-English descriptions — the authoritative field mapping reference (replaces raw Pydantic source code which confuses the LLM)",
+    },
+    # ── CMSD Pydantic Schema (raw source code — kept for codegen, excluded from mapping RAG) ──
     {
         "path": os.path.join(PROJECT_ROOT, "..", "cmsd-pydantic-master", "src", "cmsd_schema"),
         "type": "code_directory",
         "collection": "cmsd-schema",
-        "description": "CMSD v2 Pydantic schema — all entity models the agent maps SAP/MES data INTO (Resource, PartType, BOM, ProcessPlan, Order, Job, Calendar, Layout, Connection, InventoryItem, MaintenancePlan, etc.)",
+        "description": "CMSD v2 Pydantic schema — raw source code. Used for code generation, NOT for field mapping (cmsd-catalog replaces it for mapping).",
     },
     # ── CMSD Twin Service (our runtime: how we build the twin)
     {

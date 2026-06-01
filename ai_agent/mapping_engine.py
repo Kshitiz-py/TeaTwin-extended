@@ -7,6 +7,8 @@ Enhanced: multi-endpoint support, raw/converted values, smart reanalysis.
 import json
 import logging
 import sys, os
+import time
+import asyncio
 from typing import Any
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -35,7 +37,7 @@ def _get_entity_field_names(cmsd_entity: str) -> list[str]:
 class MappingEngine:
     """Proposes field mappings between API payloads and CMSD schema entities."""
 
-    async def propose_mapping(
+    def propose_mapping(
         self,
         data_point_name: str,
         cmsd_entity: str,
@@ -55,18 +57,32 @@ class MappingEngine:
             payload_analysis, rag_context,
         )
 
+        t_start = time.time()
         try:
             result = llm_client.chat_json(
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
                 temperature=0.1,
+                max_tokens=16384,
             )
+            llm_ms = int((time.time() - t_start) * 1000)
+            usage = llm_client.last_usage
             # Validate the mapping
             validated = self._validate_mapping(result, cmsd_entity)
+            validated["_timing_ms"] = {
+                "total": int((time.time() - t_start) * 1000),
+                "llm_call": llm_ms,
+                "validation": int((time.time() - t_start) * 1000) - llm_ms,
+            }
+            validated["_token_usage"] = {
+                "prompt_tokens": usage.get("prompt_tokens", 0),
+                "completion_tokens": usage.get("completion_tokens", 0),
+                "total_tokens": usage.get("total_tokens", 0),
+            }
             return validated
         except Exception as e:
             logger.error(f"Mapping proposal failed: {e}")
-            # Return a fallback structure that the user can edit
+            # Build fallback structure that the user can edit
             return {
                 "data_point": data_point_name,
                 "cmsd_entity": cmsd_entity,
@@ -74,9 +90,11 @@ class MappingEngine:
                 "mapping": {},
                 "error": str(e),
                 "requires_manual_review": True,
+                "_timing_ms": {"total": int((time.time() - t_start) * 1000), "error": str(e)},
+                "_token_usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
             }
 
-    async def propose_mapping_multi(
+    def propose_mapping_multi(
         self,
         data_point_name: str,
         cmsd_entity: str,
@@ -95,13 +113,27 @@ class MappingEngine:
             payload_analyses, rag_context,
         )
 
+        t_start = time.time()
         try:
             result = llm_client.chat_json(
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
                 temperature=0.1,
+                max_tokens=16384,
             )
+            llm_ms = int((time.time() - t_start) * 1000)
+            usage = llm_client.last_usage
             validated = self._validate_mapping(result, cmsd_entity)
+            validated["_timing_ms"] = {
+                "total": int((time.time() - t_start) * 1000),
+                "llm_call": llm_ms,
+                "validation": int((time.time() - t_start) * 1000) - llm_ms,
+            }
+            validated["_token_usage"] = {
+                "prompt_tokens": usage.get("prompt_tokens", 0),
+                "completion_tokens": usage.get("completion_tokens", 0),
+                "total_tokens": usage.get("total_tokens", 0),
+            }
             return validated
         except Exception as e:
             logger.error(f"Multi-endpoint mapping proposal failed: {e}")
@@ -112,6 +144,7 @@ class MappingEngine:
                 "mapping": {},
                 "error": str(e),
                 "requires_manual_review": True,
+                "_token_usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
             }
 
     async def chat_about_mapping(
@@ -268,6 +301,7 @@ class MappingEngine:
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
                 temperature=0.1,
+                max_tokens=16384,
             )
             refined = self._merge_review_refinements(current_mapping, result, cmsd_entity, flagged_names)
             return refined
@@ -389,6 +423,7 @@ class MappingEngine:
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
                 temperature=0.1,
+                max_tokens=16384,
             )
             # Merge refined fields into current mapping
             refined = self._merge_refinements(current_mapping, result, cmsd_entity)
@@ -630,6 +665,190 @@ class MappingEngine:
 
         parts.append("Propose a mapping from ALL the API payloads above to the CMSD fields.")
         return "\n".join(parts)
+
+    def propose_mapping_multi_instance(
+        self,
+        data_point_name: str,
+        cmsd_entity: str,
+        api_endpoint: str,
+        raw_instances: list[dict[str, Any]],
+        rag_context: str,
+    ) -> dict[str, Any]:
+        """
+        Propose a mapping using MULTIPLE INSTANCES to leverage value distribution
+        patterns. Builds a field summary showing values across all instances,
+        enabling the LLM to infer field semantics from value ranges and patterns.
+        """
+        if not raw_instances:
+            return {
+                "data_point": data_point_name,
+                "cmsd_entity": cmsd_entity,
+                "api_endpoint": api_endpoint,
+                "mapping": {},
+                "error": "No instances provided",
+                "requires_manual_review": True,
+            }
+
+        system_prompt = self._build_system_prompt()
+        user_prompt = self._build_user_prompt_multi_instance(
+            data_point_name, cmsd_entity, api_endpoint,
+            raw_instances, rag_context,
+        )
+
+        t_start = time.time()
+        try:
+            result = llm_client.chat_json(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                temperature=0.1,
+                max_tokens=16384,
+            )
+            llm_ms = int((time.time() - t_start) * 1000)
+            usage = llm_client.last_usage
+            validated = self._validate_mapping(result, cmsd_entity)
+            validated["_timing_ms"] = {
+                "total": int((time.time() - t_start) * 1000),
+                "llm_call": llm_ms,
+                "validation": int((time.time() - t_start) * 1000) - llm_ms,
+            }
+            validated["_token_usage"] = {
+                "prompt_tokens": usage.get("prompt_tokens", 0),
+                "completion_tokens": usage.get("completion_tokens", 0),
+                "total_tokens": usage.get("total_tokens", 0),
+            }
+            validated["_instance_count"] = len(raw_instances)
+            return validated
+        except Exception as e:
+            logger.error(f"Multi-instance mapping proposal failed: {e}")
+            return {
+                "data_point": data_point_name,
+                "cmsd_entity": cmsd_entity,
+                "api_endpoint": api_endpoint,
+                "mapping": {},
+                "error": str(e),
+                "requires_manual_review": True,
+                "_timing_ms": {"total": int((time.time() - t_start) * 1000), "error": str(e)},
+                "_token_usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+                "_instance_count": len(raw_instances),
+            }
+
+    def _build_user_prompt_multi_instance(
+        self,
+        data_point_name: str,
+        cmsd_entity: str,
+        api_endpoint: str,
+        raw_instances: list[dict[str, Any]],
+        rag_context: str,
+    ) -> str:
+        """Build a prompt that shows value distribution across multiple instances."""
+        cmsd_fields = _get_entity_field_names(cmsd_entity)
+        fields_str = "\n".join(f"  - {f}" for f in cmsd_fields)
+
+        # Build field-level value summary across all instances
+        field_summary = self._build_field_distribution_summary(raw_instances)
+        instance_count = len(raw_instances)
+
+        return (
+            f"## Data Point: {data_point_name}\n"
+            f"## Target CMSD Entity: {cmsd_entity}\n"
+            f"## All CMSD Fields (map every field that has data in the payload):\n{fields_str}\n\n"
+            f"## API Endpoint: {api_endpoint}\n"
+            f"## Instance Count: {instance_count}\n\n"
+            f"## RAG Context (from knowledge base):\n{rag_context[:2000]}\n\n"
+            f"## Multi-Instance Field Value Distribution:\n"
+            f"The table below shows values for each field path across {instance_count} instances. "
+            f"Use value ranges, patterns, and uniqueness to infer field semantics.\n\n"
+            f"{field_summary}\n\n"
+            f"Propose a mapping from the API payload to the CMSD fields above. "
+            f"Use the value distribution patterns to guide your mapping — "
+            f"e.g., fields with values all in 0-100 range are likely percentages, "
+            f"fields with large varying integers are likely durations in seconds, "
+            f"fields with unique string IDs are likely identifiers, "
+            f"fields with short enum-like strings are likely type/status fields."
+        )
+
+    def _build_field_distribution_summary(
+        self,
+        instances: list[dict[str, Any]],
+        max_fields: int = 40,
+        max_values_per_field: int = 8,
+    ) -> str:
+        """Build a text summary of field value distributions across instances."""
+        from collections import Counter
+
+        # Collect all field paths from the first instance
+        def extract_paths(obj: Any, prefix: str = "") -> list[str]:
+            paths = []
+            if isinstance(obj, dict):
+                for k, v in obj.items():
+                    key = f"{prefix}.{k}" if prefix else k
+                    if isinstance(v, dict):
+                        paths.extend(extract_paths(v, key))
+                    elif isinstance(v, list):
+                        paths.append(key)
+                    else:
+                        paths.append(key)
+            return paths
+
+        field_paths = extract_paths(instances[0]) if instances else []
+        field_paths = field_paths[:max_fields]
+
+        lines = []
+        lines.append(f"{'Field Path':<30} | Value Distribution Across Instances")
+        lines.append("-" * 80)
+
+        for fp in field_paths:
+            values = []
+            for inst in instances:
+                parts = fp.split(".")
+                cur = inst
+                for p in parts:
+                    if isinstance(cur, dict):
+                        cur = cur.get(p)
+                    else:
+                        cur = None
+                        break
+                if cur is not None:
+                    values.append(cur)
+
+            if not values:
+                lines.append(f"{fp:<30} | (all null/absent)")
+                continue
+
+            # Summarize value distribution
+            non_null = [v for v in values if v is not None]
+            null_count = len(values) - len(non_null)
+
+            if not non_null:
+                lines.append(f"{fp:<30} | (all null)")
+                continue
+
+            # For numeric values: show range
+            all_numeric = all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in non_null)
+            if all_numeric:
+                unique_vals = sorted(set(non_null))
+                if len(unique_vals) == 1:
+                    summary = f"all = {unique_vals[0]}"
+                else:
+                    summary = f"range=[{min(non_null)}, {max(non_null)}], unique={len(unique_vals)}"
+                if null_count > 0:
+                    summary += f", {null_count} nulls"
+                lines.append(f"{fp:<30} | NUMERIC {summary}")
+            else:
+                # For string/other: show unique values
+                str_vals = [str(v) for v in non_null]
+                unique_strs = list(dict.fromkeys(str_vals))  # preserve order, dedupe
+                if len(unique_strs) <= max_values_per_field:
+                    sample = ", ".join(f'"{v}"' for v in unique_strs[:max_values_per_field])
+                    summary = f"values=[{sample}]"
+                else:
+                    sample = ", ".join(f'"{v}"' for v in unique_strs[:5])
+                    summary = f"{len(unique_strs)} unique: [{sample}, ...]"
+                if null_count > 0:
+                    summary += f", {null_count} nulls"
+                lines.append(f"{fp:<30} | {summary}")
+
+        return "\n".join(lines)
 
     def _validate_mapping(self, proposed: dict, cmsd_entity: str) -> dict:
         """

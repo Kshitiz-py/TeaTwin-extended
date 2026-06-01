@@ -1,0 +1,161 @@
+{
+  "count": 13,
+  "resource_classes": [
+    {
+      "kennung": "RC-CNC-MILL",
+      "bezeichnung": "CNC Milling Machines",
+      "beschreibung": "5-axis CNC milling centers",
+      "maschinentyp": "machine",
+      "stundensatz": 85.0,
+      "abmessungen": {
+        "laenge": 4000.0,
+        "breite": 3000.0,
+        "hoehe": 2500.0
+      }
+    },
+    {
+      "kennung": "RC-CNC-LATHE",
+      "bezeichnung": "CNC Turning Centers",
+      "beschreibung": "CNC lathe machines",
+      "maschinentyp": "machine",
+      "stundensatz": 75.0,
+      "abmessungen": {
+        "laenge": 3500.0,
+        "breite": 2000.0,
+        "hoehe": 2000.0
+      }
+    },
+    {
+      "kennung": "RC-STAMPING",
+      "bezeichnung": "Stamping Presses",
+      "beschreibung": "Hydraulic stamping presses",
+      "maschinentyp": "machine",
+      "stundensatz": 65.0,
+      "abmessungen": {
+        "laenge": 5000.0,
+        "breite": 3000.0,
+        "hoehe": 3500.0
+      }
+    },
+    {
+      "kennung": "RC-INJECTION",
+      "bezeichnung": "Injection Molding Machines",
+      "beschreibung": "Plastic injection molding",
+      "maschinentyp": "machine",
+      "stundensatz": 55.0,
+      "abmessungen": {
+        "laenge": 4500.0,
+        "breite": 2500.0,
+        "hoehe": 3000.0
+      }
+    },
+    {
+      "kennung": "RC-PICK-PLACE",
+      "bezeichnung": "Pick & Place Robots",
+      "beschreibung": "Automated pick and place stations",
+      "maschinentyp": "station",
+      "stundensatz": 40.0,
+      "abmessungen": {
+        "laenge": 2000.0,
+        "breite": 1500.0,
+        "hoehe": 2000.0
+      }
+    },
+    {
+      "kennung": "RC-ASSEMBLY",
+      "bezeichnung": "Assembly Stations",
+      "beschreibung": "Manual/semi-automated assembly",
+      "maschinentyp": "station",
+      "stundensatz": 35.0,
+      "abmessungen": {
+        "laenge": 3000.0,
+        "breite": 2000.0,
+        "hoehe": 2000.0
+      }
+    },
+    {
+      "kennung": "RC-TESTING",
+      "bezeichnung": "Testing Stations",
+      "beschreibung": "Quality testing equipment",
+      "maschinentyp": "station",
+      "stundensatz": 50.0,
+      "abmessungen": {
+        "laenge": 2000.0,
+        "breite": 1500.0,
+        "hoehe": 1800.0
+      }
+    },
+    {
+      "kennung": "RC-CONVEYOR",
+      "bezeichnung": "Conveyor Systems",
+      "beschreibung": "Belt/roller conveyors",
+      "maschinentyp": "conveyor",
+      "stundensatz": 5.0,
+      "abmessungen": {
+        "laenge": null,
+        "breite": null,
+        "hoehe": null
+      }
+    },
+    {
+      "kennung": "RC-BUFFER",
+      "bezeichnung": "Buffer/Storage",
+      "beschreibung": "Intermediate storage buffers",
+      "maschinentyp": "buffer",
+      "stundensatz": 2.0,
+      "abmessungen": {
+        "laenge": 3000.0,
+        "breite": 2000.0,
+        "hoehe": 1500.0
+      }
+    },
+    {
+      "kennung": "RC-OPERATOR",
+      "bezeichnung": "Human Operators",
+      "beschreibung": "Skilled manufacturing operators",
+      "maschinentyp": "employee",
+      "stundensatz": 28.0,
+      "abmessungen": {
+        "laenge": null,
+        "breite": null,
+        "hoehe": null
+      }
+    },
+    {
+      "kennung": "RC-TRANSPORTER",
+      "bezeichnung": "Forklift/AGV",
+      "beschreibung": "Material transport vehicles",
+      "maschinentyp": "transporter",
+      "stundensatz": 20.0,
+      "abmessungen": {
+        "laenge": 2500.0,
+        "breite": 1200.0,
+        "hoehe": 2200.0
+      }
+    },
+    {
+      "kennung": "RC-SOURCE",
+      "bezeichnung": "Raw Material Source",
+      "beschreibung": "Input point for raw materials",
+      "maschinentyp": "source",
+      "stundensatz": 0.0,
+      "abmessungen": {
+        "laenge": 2000.0,
+        "breite": 1000.0,
+        "hoehe": 1500.0
+      }
+    },
+    {
+      "kennung": "RC-SINK",
+      "bezeichnung": "Finished Goods Sink",
+      "beschreibung": "Output point for finished goods",
+      "maschinentyp": "sink",
+      "stundensatz": 0.0,
+      "abmessungen": {
+        "laenge": 2000.0,
+        "breite": 1000.0,
+        "hoehe": 1500.0
+      }
+    }
+  ]
+}

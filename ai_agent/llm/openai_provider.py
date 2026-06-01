@@ -38,6 +38,11 @@ class OpenAIProvider(LLMProvider):
         self.embed_model = embed_model
         self.timeout = 120
         self._client: httpx.Client | None = None
+        self._last_usage: dict[str, int] = {}
+
+    @property
+    def last_usage(self) -> dict[str, int]:
+        return self._last_usage
 
     def configure(
         self,
@@ -83,11 +88,10 @@ class OpenAIProvider(LLMProvider):
             payload = {
                 "model": self.chat_model,
                 "messages": [{"role": "user", "content": "hi"}],
-                "max_tokens": 1,
+                "max_tokens": 200,
                 "temperature": 0,
             }
-            # Use a short timeout so connection test fails fast
-            resp = self.client.post("/v1/chat/completions", json=payload, timeout=10)
+            resp = self.client.post("/v1/chat/completions", json=payload, timeout=20)
             if resp.status_code == 200:
                 return {
                     "ok": True,
@@ -141,6 +145,7 @@ class OpenAIProvider(LLMProvider):
             return full_response
         else:
             data = resp.json()
+            self._last_usage = data.get("usage", {})
             return data.get("choices", [{}])[0].get("message", {}).get("content", "")
 
     def chat_json(
@@ -148,6 +153,7 @@ class OpenAIProvider(LLMProvider):
         system_prompt: str,
         user_prompt: str,
         temperature: float = 0.0,
+        max_tokens: int = 4096,
     ) -> dict[str, Any]:
         json_system = (
             system_prompt
@@ -158,7 +164,7 @@ class OpenAIProvider(LLMProvider):
             {"role": "system", "content": json_system},
             {"role": "user", "content": user_prompt},
         ]
-        raw = self.chat(messages, temperature=temperature)
+        raw = self.chat(messages, temperature=temperature, max_tokens=max_tokens)
 
         raw = raw.strip()
         if raw.startswith("```"):
@@ -180,7 +186,6 @@ class OpenAIProvider(LLMProvider):
             raise ValueError(f"Model did not return valid JSON: {raw[:200]}")
 
     def embed(self, texts: list[str]) -> list[list[float]]:
-        # Check if this provider supports embeddings
         for no_embed in NO_EMBED_PROVIDERS:
             if no_embed in self.host:
                 raise NotImplementedError(
@@ -197,7 +202,6 @@ class OpenAIProvider(LLMProvider):
         return [item["embedding"] for item in data.get("data", [])]
 
     def list_models(self) -> list[dict[str, str]]:
-        """List available models from OpenAI-compatible /v1/models endpoint."""
         resp = self.client.get("/v1/models")
         resp.raise_for_status()
         data = resp.json()

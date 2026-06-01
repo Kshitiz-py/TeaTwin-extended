@@ -325,6 +325,32 @@ async def reload_mappings():
     }
 
 
+@router.get("/refresh/analytics")
+async def get_analytics():
+    """Aggregate error and warning counts from refresh history for paper evaluation.
+
+    Categorizes failures into: type coercion, dangling references, field not found,
+    API unreachable, and relation errors. Provides totals and per-entity breakdown.
+    """
+    if not orchestrator:
+        raise HTTPException(503, "Service not ready")
+
+    analytics = orchestrator.get_analytics()
+
+    # Add current mapping summary
+    analytics["mappings_summary"] = {
+        "total": len(orchestrator._mapping_factory._mappings),
+        "by_entity": {},
+    }
+    for m in orchestrator._mapping_factory._mappings:
+        entity = m.get("cmsd_entity", "unknown")
+        if entity not in analytics["mappings_summary"]["by_entity"]:
+            analytics["mappings_summary"]["by_entity"][entity] = 0
+        analytics["mappings_summary"]["by_entity"][entity] += 1
+
+    return analytics
+
+
 # ─── WebSocket ──────────────────────────────────────────────
 
 @router.websocket("/ws/events")

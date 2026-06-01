@@ -29,6 +29,11 @@ class OllamaProvider(LLMProvider):
         self.embed_model = embed_model
         self.timeout = 120
         self._client: httpx.Client | None = None
+        self._last_usage: dict[str, int] = {}
+
+    @property
+    def last_usage(self) -> dict[str, int]:
+        return self._last_usage
 
     def configure(
         self,
@@ -124,6 +129,12 @@ class OllamaProvider(LLMProvider):
             return full_response
         else:
             data = resp.json()
+            # Capture token usage if available (Ollama uses eval_count)
+            self._last_usage = {
+                "prompt_tokens": data.get("prompt_eval_count", 0),
+                "completion_tokens": data.get("eval_count", 0),
+                "total_tokens": data.get("prompt_eval_count", 0) + data.get("eval_count", 0),
+            }
             return data.get("message", {}).get("content", "")
 
     def chat_json(
@@ -131,13 +142,14 @@ class OllamaProvider(LLMProvider):
         system_prompt: str,
         user_prompt: str,
         temperature: float = 0.0,
+        max_tokens: int = 4096,
     ) -> dict[str, Any]:
         json_system = (
             system_prompt
             + "\n\nIMPORTANT: Your response MUST be valid JSON. Do not include any text outside the JSON object. "
             "Do not wrap it in markdown code blocks. Output raw JSON only."
         )
-        raw = self._chat_structured(json_system, user_prompt, temperature=temperature)
+        raw = self._chat_structured(json_system, user_prompt, temperature=temperature, max_tokens=max_tokens)
 
         raw = raw.strip()
         if raw.startswith("```"):
@@ -159,13 +171,14 @@ class OllamaProvider(LLMProvider):
             raise ValueError(f"Model did not return valid JSON: {raw[:200]}")
 
     def _chat_structured(
-        self, system_prompt: str, user_prompt: str, temperature: float = 0.1
+        self, system_prompt: str, user_prompt: str, temperature: float = 0.1,
+        max_tokens: int = 4096,
     ) -> str:
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ]
-        return self.chat(messages, temperature=temperature)
+        return self.chat(messages, temperature=temperature, max_tokens=max_tokens)
 
     def embed(self, texts: list[str]) -> list[list[float]]:
         # Use /api/embed (newer Ollama endpoint) — /api/embeddings returns

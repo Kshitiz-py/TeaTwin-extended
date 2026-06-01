@@ -132,7 +132,7 @@ class VectorStore:
         # ChromaDB metadata indexing issues)
         results = self.collection.query(
             query_embeddings=[query_embedding],
-            n_results=max(n_results * 3, 30),
+            n_results=max(n_results * 10, 40),
             include=["documents", "metadatas", "distances"],
         )
 
@@ -142,6 +142,8 @@ class VectorStore:
             for i in range(len(results["ids"][0])):
                 doc = results["documents"][0][i] if results.get("documents") else ""
                 meta = results["metadatas"][0][i] if results.get("metadatas") else {}
+                if meta is None:
+                    meta = {}
                 distance = results["distances"][0][i] if results.get("distances") else 1.0
                 # Convert cosine distance to similarity score (0-1)
                 score = max(0.0, 1.0 - float(distance))

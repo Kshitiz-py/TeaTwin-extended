@@ -1,0 +1,20 @@
+======================================================================
+PAPER EVALUATION v2 — Multi-Model, Multi-Instance, Token-Aware
+======================================================================
+AI Agent: http://localhost:8003/api/agent/v1
+Models: ['deepseek-flash']
+Variants: ['clean', 'legacy', 'german', 'deep']
+Entities: ['Resource', 'ResourceClass', 'Order', 'PartType']
+RAG modes: ['full_rag', 'no_rag']
+Instance modes: ['single']
+Runs per experiment: 10
+Total experiments: 320
+Est. time: ~53 min
+
+
+======================================================================
+MODEL: deepseek-v4-flash (deepseek-flash)
+  host=https://api.deepseek.com, provider=deepseek
+======================================================================
+  Using pre-configured LLM (--skip-config)
+  Running 320 experiments with 12 workers...
