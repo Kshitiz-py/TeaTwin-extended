@@ -21,6 +21,8 @@ from .rag.document_loader import document_loader
 from .mapping_engine import mapping_engine, TRANSFORMATION_PRESETS
 from .api_explorer import api_explorer
 from .llm import llm_client, PROVIDER_PRESETS
+from .odata_ingest import odata_ingestor
+from .recommender import endpoint_recommender
 
 logger = logging.getLogger("ai-agent.routes")
 
@@ -81,6 +83,23 @@ class SmartReanalyzeRequest(BaseModel):
 class FetchEndpointsRequest(BaseModel):
     """Request model for POST /mapping/fetch — fire one or more endpoints."""
     endpoints: list[EndpointSpec]
+
+
+class DiscoverRequest(BaseModel):
+    """Request model for POST /sources/{id}/discover — ingest SAP OData $metadata."""
+    entity_set_filter: list[str] | None = None
+
+
+class SampleRequest(BaseModel):
+    """Request model for POST /sources/{id}/sample — local-only row preview."""
+    entity_set: str
+    top: int = 3
+
+
+class RecommendRequest(BaseModel):
+    """Request model for POST /mapping/recommend-endpoints."""
+    source_id: str
+    cmsd_entity: str
 
 
 # ─── Provider Models ───────────────────────────────────────
@@ -286,6 +305,47 @@ async def remove_source(source_id: str):
     return {"removed": True, "source_id": source_id}
 
 
+# ─── SAP OData Discovery (deterministic; the LLM never connects to SAP) ────
+
+@router.post("/sources/{source_id}/discover")
+async def discover_source(source_id: str, request: DiscoverRequest):
+    """Fetch SAP OData $metadata, parse it into a metadata-only SourceSchema,
+    persist the schema, and index metadata-only chunks into the `source-schema`
+    RAG corpus. Deterministic — no LLM, no row data."""
+    try:
+        return await odata_ingestor.discover(source_id, request.entity_set_filter)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+    except Exception as e:
+        logger.error(f"Discover failed for {source_id}: {e}\n{traceback.format_exc()}")
+        raise HTTPException(502, f"Discover failed: {e}")
+
+
+@router.get("/sources/{source_id}/schema")
+async def get_source_schema(source_id: str, entity_set: str | None = None):
+    """Return the persisted SourceSchema (metadata only) for UI browsing."""
+    schema = odata_ingestor.load_schema(source_id, entity_set=entity_set)
+    if schema is None:
+        raise HTTPException(404, f"No schema for source '{source_id}'. Run /discover first.")
+    return {"source_schema": schema.to_dict()}
+
+
+@router.post("/sources/{source_id}/sample")
+async def sample_source(source_id: str, request: SampleRequest):
+    """Fetch a few rows from a SAP OData entity set for LOCAL UI preview only.
+
+    Row data is returned to the browser; it is NEVER sent to the LLM and NEVER
+    indexed in RAG. This is the only source endpoint that returns row data.
+    """
+    try:
+        return await odata_ingestor.sample(source_id, request.entity_set, request.top)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+    except Exception as e:
+        logger.error(f"Sample failed for {source_id}: {e}\n{traceback.format_exc()}")
+        raise HTTPException(502, f"Sample failed: {e}")
+
+
 # ─── RAG Indexing ──────────────────────────────────────────
 
 @router.post("/rag/index")
@@ -312,6 +372,23 @@ async def get_rag_stats():
 
 
 # ─── Mapping ────────────────────────────────────────────────
+
+@router.post("/mapping/recommend-endpoints")
+async def recommend_endpoints(request: RecommendRequest):
+    """Recommend a covering set of SAP OData endpoints for a CMSD entity.
+
+    LLM-over-RAG (metadata only). The LLM never connects to SAP and never sees row
+    data. Requires the source to have been discovered first (POST /sources/{id}/discover)
+    so its source-schema is indexed in the RAG corpus.
+    """
+    try:
+        return await endpoint_recommender.recommend(request.source_id, request.cmsd_entity)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        logger.error(f"Recommend failed: {e}\n{traceback.format_exc()}")
+        raise HTTPException(502, f"Recommend failed: {e}")
+
 
 @router.post("/mapping/analyze")
 async def analyze_mapping(request: MappingAnalyzeRequest):
@@ -951,11 +1028,34 @@ async def confirm_mapping(mapping_id: str, request: dict):
         endpoint = approved_payloads[0].get("endpoint", "")
     if not endpoint:
         endpoint = mapping.get("endpoint", mapping.get("api_endpoint", ""))
+
+    # Resolve + (optionally) encrypt the source auth. The connection_manager stores
+    # flat auth_type/username/password; normalize_auth maps those into the {type,...}
+    # shape that cmsd_twin_service.api_client._build_auth_headers reads. When
+    # SAP_CRED_KEY is set, the normalized auth is encrypted into auth_encrypted
+    # (a Fernet token at rest) and the plaintext `auth` key is omitted; otherwise we
+    # fall back to a plaintext normalized `auth` block (dev / no-key mode). This also
+    # fixes the previous bug where `source.get("auth", {"type":"none"})` always
+    # returned {"type":"none"} (sources have no `auth` key), silently breaking real
+    # SAP Basic auth while appearing to work for the unauthenticated mock SAP.
+    from shared.odata.auth import normalize_auth
+    norm_auth = normalize_auth(source)
+    auth_encrypted = None
+    if os.getenv("SAP_CRED_KEY"):
+        try:
+            from shared.crypto import encrypt_dict
+            auth_encrypted = encrypt_dict(norm_auth)
+        except Exception as e:
+            logger.warning(f"auth encryption failed for {mapping_id}, storing plaintext: {e}")
     mapping["source"] = {
+        "type": mapping.get("source_type", "generic"),
         "base_url": source.get("base_url", ""),
         "endpoint": endpoint,
         "method": mapping.get("method", "GET"),
-        "auth": source.get("auth", {"type": "none"}),
+        "auth_encrypted": auth_encrypted,
+        "auth": norm_auth if auth_encrypted is None else None,
+        "headers": mapping.get("source_headers", source.get("extra_headers", {}) or {}),
+        "params": mapping.get("source_params", {}) or {},
     }
 
     # Store endpoint/payload info for edit restoration

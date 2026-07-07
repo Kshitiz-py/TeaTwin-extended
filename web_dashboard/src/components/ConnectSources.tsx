@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import SourceCard, { SourceData } from './SourceCard';
 import { agentApi } from '../services/agentApi';
+import EntitySetBrowser from './EntitySetBrowser';
 
 interface ConnectSourcesProps {
   onSourcesComplete: (sources: SourceData[]) => void;
@@ -12,6 +13,9 @@ export default function ConnectSources({ onSourcesComplete, initialSources }: Co
   const [sources, setSources] = useState<SourceData[]>(initialSources || []);
   const [indexing, setIndexing] = useState(false);
   const [indexResult, setIndexResult] = useState<string | null>(null);
+  const [discovering, setDiscovering] = useState(false);
+  const [discoveredSourceId, setDiscoveredSourceId] = useState<string | null>(null);
+  const [selectedEntitySets, setSelectedEntitySets] = useState<string[]>([]);
 
   useEffect(() => {
     // Load existing sources on mount
@@ -128,6 +132,47 @@ export default function ConnectSources({ onSourcesComplete, initialSources }: Co
     }
   };
 
+  const addRealSap = async () => {
+    const sapSource: SourceData = {
+      id: '',
+      name: 'Real SAP (a33p) — API_PRODUCTION_ROUTING',
+      base_url: 'https://a33p.ucc.cloud/sap/opu/odata/sap/API_PRODUCTION_ROUTING',
+      auth_type: 'basic',
+      username: '',
+      password: '',
+      extra_headers: { 'sap-client': '200' },
+      status: 'configured',
+    };
+    try {
+      const created = await agentApi.createSource(sapSource);
+      setSources(prev => [...prev.filter(s => s.id !== created.id), created]);
+      setIndexResult('Real SAP source added — enter your SAP username/password, Test, then Discover.');
+    } catch (e: any) {
+      setIndexResult(`Failed to add SAP source: ${e.message}`);
+    }
+  };
+
+  const handleDiscoverSap = async () => {
+    const sap = sources.find(s => /sap/i.test(s.name) && s.id);
+    if (!sap) {
+      setIndexResult('Add and save a SAP source first (e.g. "Real SAP (a33p)").');
+      return;
+    }
+    setDiscovering(true);
+    setIndexResult(null);
+    try {
+      const res = await agentApi.discoverSchema(sap.id);
+      setDiscoveredSourceId(sap.id);
+      setIndexResult(`Discovered ${res.entity_sets.length} entity sets; indexed ${res.chunks_indexed} source-schema chunks.`);
+    } catch (e: any) {
+      setIndexResult(`Discover failed: ${e.message}`);
+    }
+    setDiscovering(false);
+  };
+
+  const toggleEntitySet = (entitySet: string) =>
+    setSelectedEntitySets(prev => prev.includes(entitySet) ? prev.filter(x => x !== entitySet) : [...prev, entitySet]);
+
   const handleNext = () => {
     onSourcesComplete(sources.filter(s => s.status === 'connected'));
   };
@@ -162,6 +207,29 @@ export default function ConnectSources({ onSourcesComplete, initialSources }: Co
               }}
             >
               🧪 Mock APIs
+            </button>
+            <button
+              onClick={addRealSap}
+              title="Pre-fill a real SAP S/4HANA OData source (a33p, API_PRODUCTION_ROUTING, Basic auth)"
+              style={{
+                padding: '8px 16px', background: '#1e3a5f', color: '#93c5fd',
+                border: '1px solid #3b82f6', borderRadius: '6px', cursor: 'pointer',
+                fontSize: '13px', fontWeight: 500,
+              }}
+            >
+              🔵 Real SAP
+            </button>
+            <button
+              onClick={handleDiscoverSap}
+              disabled={discovering}
+              title="Fetch SAP $metadata, parse it, and index the source-schema RAG corpus (deterministic; no LLM)"
+              style={{
+                padding: '8px 16px', background: discovering ? '#334155' : '#1e3a5f', color: '#93c5fd',
+                border: '1px solid #3b82f6', borderRadius: '6px', cursor: discovering ? 'not-allowed' : 'pointer',
+                fontSize: '13px', fontWeight: 500,
+              }}
+            >
+              {discovering ? '⏳ Discovering…' : '🔍 Discover SAP'}
             </button>
             <button
               onClick={addSource}
@@ -212,6 +280,14 @@ export default function ConnectSources({ onSourcesComplete, initialSources }: Co
           </div>
         )}
       </div>
+
+      {discoveredSourceId && (
+        <EntitySetBrowser
+          sourceId={discoveredSourceId}
+          selected={selectedEntitySets}
+          onToggle={toggleEntitySet}
+        />
+      )}
 
       {/* Bottom bar */}
       <div style={{

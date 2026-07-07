@@ -5,6 +5,7 @@ import MappingTable from './MappingTable';
 import EntityPreview from './EntityPreview';
 import MappingChat from './MappingChat';
 import RichEntityPicker from './RichEntityPicker';
+import EndpointRecommendation from './EndpointRecommendation';
 import { agentApi, FetchedPayload } from '../services/agentApi';
 import { SourceData } from './SourceCard';
 
@@ -1004,6 +1005,21 @@ export default function MappingWizard({ onNavigateToQueue, preloadedMapping, onC
                 onSelect={setCmsdEntity}
                 existingEntities={existingEntities}
               />
+
+              {/* ── Optional: smart endpoint recommendation (SAP OData) ── */}
+              {(() => {
+                const recSourceId = sources.find(s => /sap/i.test(s.name))?.id || sources[0]?.id || '';
+                return recSourceId ? (
+                  <EndpointRecommendation
+                    sourceId={recSourceId}
+                    cmsdEntity={cmsdEntity}
+                    onApprove={(eps) => setEndpoints(eps.map(e => ({
+                      ...defaultEndpoint(sources),
+                      source_id: e.sourceId, endpoint: e.endpoint, method: e.method, label: e.label,
+                    })))}
+                  />
+                ) : null;
+              })()}
 
               {/* ── Section 2: API Endpoints ── */}
               <div style={{ marginTop: '20px', paddingTop: '18px', borderTop: '1px solid rgba(51,65,85,0.3)' }}>

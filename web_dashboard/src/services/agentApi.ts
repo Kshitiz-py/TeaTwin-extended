@@ -97,6 +97,95 @@ export interface FetchEndpointsResponse {
   payloads: FetchedPayload[];
 }
 
+// ─── SAP OData Discovery ───────────────────────────────────
+
+export interface DiscoveredEntitySet {
+  name: string;
+  entity_type: string;
+  sap_label: string;
+  key_fields: string[];
+  property_count: number;
+  navigation_count: number;
+}
+
+export interface DiscoverResponse {
+  success: boolean;
+  source_schema_id: string;
+  entity_sets: DiscoveredEntitySet[];
+  chunks_indexed: number;
+}
+
+export interface ODataPropertyInfo {
+  name: string;
+  type: string;
+  nullable: boolean;
+  is_key: boolean;
+  sap_label: string;
+  sap_unit: string;
+  sap_semantics: string;
+  max_length: number | null;
+}
+
+export interface ODataNavigationInfo {
+  name: string;
+  to_entity_type: string;
+  from_role: string;
+  to_role: string;
+  relationship: string;
+  referential_constraints: [string, string][];
+}
+
+export interface ODataEntityTypeInfo {
+  name: string;
+  entity_set_name: string;
+  properties: ODataPropertyInfo[];
+  keys: string[];
+  navigation_properties: ODataNavigationInfo[];
+  sap_label: string;
+}
+
+export interface SourceSchemaResponse {
+  source_schema: {
+    service_url: string;
+    namespace: string;
+    entity_types: ODataEntityTypeInfo[];
+  };
+}
+
+export interface CoveringEndpoint {
+  entity_set: string;
+  endpoint: string;
+  role: string;
+  key_field: string;
+  count_path: string;
+}
+
+export interface FieldAttribution {
+  [cmsd_field: string]: {
+    entity_set: string;
+    property: string;
+    confidence: string;
+    transform?: string;
+    unit_from_field?: { unit_path: string; target_unit: string };
+  };
+}
+
+export interface RecommendResponse {
+  cmsd_entity: string;
+  covering_endpoints: CoveringEndpoint[];
+  field_attribution: FieldAttribution;
+  join_keys: { from: { entity_set: string; property: string }; to: { entity_set: string; property: string }; via_nav: string }[];
+  coverage_gaps: string[];
+  proposed_relations: any[];
+  notes?: string;
+}
+
+export interface SampleResponse {
+  rows: any[];
+  count: number;
+  entity_set: string;
+}
+
 export interface AnalyzeMappingMultiRequest {
   endpoints: EndpointInput[];
   data_point_name: string;
@@ -251,6 +340,43 @@ export const agentApi = {
   },
   async deleteSource(id: string) {
     const res = await fetch(`${BASE}/sources/${id}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  },
+  // SAP OData Discovery — deterministic; the LLM never connects to SAP.
+  async discoverSchema(sourceId: string, entitySetFilter?: string[]): Promise<DiscoverResponse> {
+    const res = await fetch(`${BASE}/sources/${sourceId}/discover`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entity_set_filter: entitySetFilter ?? null }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  },
+  async getSourceSchema(sourceId: string, entitySet?: string): Promise<SourceSchemaResponse> {
+    const url = entitySet
+      ? `${BASE}/sources/${sourceId}/schema?entity_set=${encodeURIComponent(entitySet)}`
+      : `${BASE}/sources/${sourceId}/schema`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  },
+  async sampleEntitySet(sourceId: string, entitySet: string, top = 3): Promise<SampleResponse> {
+    const res = await fetch(`${BASE}/sources/${sourceId}/sample`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entity_set: entitySet, top }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  },
+  // Endpoint recommendation — LLM-over-RAG (metadata only).
+  async recommendEndpoints(sourceId: string, cmsdEntity: string): Promise<RecommendResponse> {
+    const res = await fetch(`${BASE}/mapping/recommend-endpoints`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source_id: sourceId, cmsd_entity: cmsdEntity }),
+    });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return res.json();
   },

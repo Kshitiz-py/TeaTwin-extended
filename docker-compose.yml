@@ -82,6 +82,9 @@ services:
       AUTO_INDEX_ON_STARTUP: "0"
       # Path where agent can find the CMSD twin codebase for code generation
       CMSD_TWIN_REPO_PATH: /app/git-repo
+      # Fernet key for encrypting SAP credentials at rest (shared with cmsd-twin).
+      # Unset = dev/no-key mode (plaintext normalized auth in mapping source block).
+      SAP_CRED_KEY: ${SAP_CRED_KEY:-}
     volumes:
       - chromadb_data:/app/chromadb_data
       - agent_mappings:/app/sap-mes-cmsd-twin/.agent-mappings
@@ -124,6 +127,8 @@ services:
       SAP_API_URL: http://mock-sap-api:8001/api/sap/v1
       MES_API_URL: http://mock-mes-api:8002/api/mes/v1
       POLL_INTERVAL: "10"
+      # Fernet key for decrypting SAP credentials at runtime (shared with ai-agent).
+      SAP_CRED_KEY: ${SAP_CRED_KEY:-}
     depends_on:
       mock-sap-api:
         condition: service_started

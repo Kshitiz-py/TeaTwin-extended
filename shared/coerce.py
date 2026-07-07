@@ -43,11 +43,11 @@ def _load_entity_types(entity_type: str) -> dict[str, type]:
     try:
         base = os.path.join(os.path.dirname(__file__), "..", "cmsd-pydantic-master", "src")
         sys.path.insert(0, base)
-        from cmsd_schema.resource_entities import Resource
-        from cmsd_schema.order_entities import Order
-        from cmsd_schema.part_entities import Part, PartType, BillOfMaterials
-        from cmsd_schema.process_planning import ProcessPlan
-        from cmsd_schema.calendar_entities import Calendar
+        from cmsd_schema.resource_entities import Resource, ResourceClass
+        from cmsd_schema.order_entities import Order, OrderLine
+        from cmsd_schema.part_entities import Part, PartType, BillOfMaterials, BillOfMaterialsComponent
+        from cmsd_schema.process_planning import ProcessPlan, Process
+        from cmsd_schema.calendar_entities import Calendar, Shift, Break, Holiday
         from cmsd_schema.production_operations import Job
         from cmsd_schema.inventory_entities import InventoryItem
         from cmsd_schema.maintenance_entities import MaintenancePlan
@@ -55,12 +55,19 @@ def _load_entity_types(entity_type: str) -> dict[str, type]:
 
         REGISTRY: dict[str, type] = {
             "Resource": Resource,
+            "ResourceClass": ResourceClass,
             "Order": Order,
+            "OrderLine": OrderLine,
             "Part": Part,
             "PartType": PartType,
             "BillOfMaterials": BillOfMaterials,
+            "BillOfMaterialsComponent": BillOfMaterialsComponent,
             "ProcessPlan": ProcessPlan,
+            "Process": Process,
             "Calendar": Calendar,
+            "Shift": Shift,
+            "Break": Break,
+            "Holiday": Holiday,
             "Job": Job,
             "InventoryItem": InventoryItem,
             "MaintenancePlan": MaintenancePlan,

@@ -93,6 +93,22 @@ class Retriever:
                 for r in api_results:
                     context_parts.append(f"**File**: {r['metadata'].get('filename', 'Unknown')}\n{r['content'][:400]}")
 
+        # 5. Search the SAP OData source-schema corpus (METADATA ONLY — entity/property
+        #    names, sap:label, types, keys, navigation properties). Populated by
+        #    POST /sources/{id}/discover. Gives the LLM the *source-side* field
+        #    semantics so it maps both sides (CMSD target + SAP source) — the
+        #    bidirectional bridge that resolves cryptic-field ambiguity.
+        source_schema_results = self.retrieve(
+            f"SAP OData entity set properties fields for {cmsd_entity} mapping",
+            top_k=4,
+            collections=["source-schema"],
+        )
+        if source_schema_results:
+            context_parts.append("### SAP OData Source Schema (METADATA ONLY)")
+            for r in source_schema_results:
+                entity_set = r['metadata'].get('entity_set', 'Unknown')
+                context_parts.append(f"**EntitySet**: {entity_set}\n{r['content'][:800]}")
+
         return "\n\n".join(context_parts) if context_parts else "No relevant documents found in the knowledge base."
 
     def retrieve_code_context(self, file_paths: list[str]) -> dict[str, str]:

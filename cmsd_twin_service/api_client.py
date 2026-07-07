@@ -39,8 +39,13 @@ class APIClient:
 
     async def fetch(self, url: str, method: str = "GET",
                     headers: dict | None = None,
-                    auth_config: dict | None = None) -> dict[str, Any]:
-        """Generic fetch for any URL with optional auth."""
+                    auth_config: dict | None = None,
+                    params: dict | None = None) -> dict[str, Any]:
+        """Generic fetch for any URL with optional auth + query params.
+
+        ``params`` is passed through to httpx as URL query parameters — used by the
+        OData runtime path for ``sap-client``/``$format``/``$top``/``$select``.
+        """
         if not self._client:
             raise RuntimeError("APIClient not opened via async context manager")
 
@@ -51,9 +56,9 @@ class APIClient:
             request_headers.update(headers)
 
         if method.upper() == "GET":
-            resp = await self._client.get(url, headers=request_headers)
+            resp = await self._client.get(url, headers=request_headers, params=params)
         elif method.upper() == "POST":
-            resp = await self._client.post(url, headers=request_headers)
+            resp = await self._client.post(url, headers=request_headers, params=params)
         else:
             raise ValueError(f"Unsupported HTTP method: {method}")
 

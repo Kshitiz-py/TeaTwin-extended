@@ -172,14 +172,18 @@ class MappingDrivenFactory:
             else:
                 url = f"{source.get('base_url', '')}{source.get('endpoint', '')}"
                 method = source.get("method", "GET")
-                auth = source.get("auth", {"type": "none"})
+                headers = source.get("headers") or {}
+                params = source.get("params") or {}
+                auth = self._resolve_auth(source)
 
                 # Fetch with retry (Slice 5.3 adds backoff)
                 response = None
                 last_error = None
                 for attempt in range(3):
                     try:
-                        response = await api_client.fetch(url, method, auth_config=auth)
+                        response = await api_client.fetch(
+                            url, method, headers=headers, auth_config=auth, params=params
+                        )
                         break
                     except Exception as e:
                         last_error = e
@@ -272,8 +276,36 @@ class MappingDrivenFactory:
                     })
                     continue
 
-                # Apply transformation
+                # Resolve unit_from_field (OData sap:unit): read the SAP unit code from
+                # the companion property (deterministic, in-factory — never the LLM),
+                # look up the conversion factor, and synthesize a unit_conversion. The
+                # LLM only decides *which* companion field holds the unit (metadata);
+                # the actual unit value + factor are resolved here at runtime.
                 transformation = config.get("transformation")
+                unit_from = config.get("unit_from_field")
+                if unit_from and not transformation and isinstance(unit_from, dict):
+                    unit_path = unit_from.get("unit_path", "")
+                    target_unit = unit_from.get("target_unit", "second")
+                    if unit_path:
+                        unit_value = self._resolve_path(item, unit_path)
+                        if unit_value:
+                            from shared.odata.units import convert_factor
+                            factor = convert_factor(str(unit_value), target_unit)
+                            if factor is not None:
+                                transformation = {
+                                    "type": "unit_conversion",
+                                    "params": {"factor": factor, "from": str(unit_value), "to": target_unit},
+                                }
+                            else:
+                                warnings.append({
+                                    "entity_type": entity_type,
+                                    "instance_key": str(key_value or "?"),
+                                    "field": cmsd_field,
+                                    "api_path": api_path,
+                                    "warning": f"unknown SAP unit '{unit_value}' — value left in raw unit",
+                                })
+
+                # Apply transformation
                 if transformation and isinstance(transformation, dict):
                     result = execute_transformation(str(raw_value), transformation)
                     if result.get("success"):
@@ -706,6 +738,29 @@ class MappingDrivenFactory:
             if instances:
                 index[entity_type] = instances
         return index
+
+    def _resolve_auth(self, source: dict) -> dict:
+        """Resolve the auth config for a runtime fetch.
+
+        Decrypts ``source.auth_encrypted`` (Fernet, when ``SAP_CRED_KEY`` is set) into
+        the normalized {type, ...} shape that ``api_client._build_auth_headers`` reads.
+        Falls back to the plaintext ``source.auth`` block for dev/no-key mode and for
+        legacy mock mappings (which store ``auth: {"type":"none"}``).
+        """
+        enc = source.get("auth_encrypted")
+        if enc:
+            try:
+                from shared.crypto import decrypt_dict
+                decrypted = decrypt_dict(enc)
+                if isinstance(decrypted, dict):
+                    return decrypted
+                logger.warning(
+                    f"auth_encrypted present but decrypt returned none for "
+                    f"{source.get('endpoint', '')} — SAP_CRED_KEY unset at runtime?"
+                )
+            except Exception as e:
+                logger.warning(f"auth decrypt failed for {source.get('endpoint', '')}: {e}")
+        return source.get("auth") or {"type": "none"}
 
     def _resolve_path(self, obj: Any, path: str) -> Any:
         """Follow a dot-notation path into a dict (instance-relative).

@@ -543,7 +543,12 @@ class MappingEngine:
             "CMSD nested path (cmsd_path). Only propose where confidence is 'high' or 'medium'.\n"
             "IMPORTANT: The referenced field MUST remain in the 'mapping' object too. Relations are an "
             "ADDITIONAL annotation — do NOT remove the field from 'mapping' just because it appears in "
-            "'relations'. The field should exist in BOTH places.\n\n"
+            "'relations'. The field should exist in BOTH places.\n"
+            "11. SAP OData sap:unit fields: when the RAG source-schema context shows a source property "
+            "has a 'sap:unit=<companion>' companion (e.g. StandardWorkQuantity1 has sap:unit=StandardWorkQuantityUnit1), "
+            "add 'unit_from_field': {unit_path: '<companion>', target_unit: 'second'} to that field's config. "
+            "Do NOT propose a transformation or compute a factor — the runtime resolves it deterministically "
+            "from the SAP unit code. Never use unit_conversion/divide_by for sap:unit fields.\n\n"
             "Output format: JSON with this structure:\n"
             '{\n'
             '  "data_point": "string",\n'
@@ -557,6 +562,7 @@ class MappingEngine:
             '      "converted_value": "MUST equal raw_value (never transform)",\n'
             '      "sample_value": "value from payload (legacy)",\n'
             '      "source_endpoint": "which endpoint this came from",\n'
+            '      "unit_from_field": "optional {unit_path, target_unit} for source fields with a sap:unit companion — never set a factor",\n'
             '      "confidence": "high|medium|low"\n'
             '    },\n'
             '    ...\n'
@@ -691,6 +697,7 @@ class MappingEngine:
                     "sample_value": map_info.get("sample_value", map_info.get("raw_value", "")),
                     "confidence": map_info.get("confidence", "medium"),
                     "source_endpoint": map_info.get("source_endpoint", ""),
+                    "unit_from_field": map_info.get("unit_from_field"),
                     "transformation": transformation,
                 }
                 # Safety net: when type_conversion is "none", converted_value MUST equal raw_value

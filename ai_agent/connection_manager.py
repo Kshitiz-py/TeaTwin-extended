@@ -1,19 +1,34 @@
 """
 Connection Manager — Stores, tests, and manages data source connections.
 Supports: Basic Auth, Bearer Token, OAuth2, API Key, mTLS, and None.
-Stored in-memory (extensible to encrypted SQLite/MySQL).
+
+Storage: in-memory by default. When ``SAP_CRED_KEY`` is set, the source store is
+additionally persisted to ``.agent-mappings/credentials/sources.json`` **encrypted
+with Fernet** (see shared.crypto), so configured SAP sources survive an ai-agent
+restart without credentials ever being written to disk in plaintext. When the key
+is unset, behavior is unchanged (in-memory only) — the dev / no-key mode.
 """
 
 import json
 import logging
+import os
+import time
 import uuid
 from typing import Any
 
 import httpx
 
+from .config import PROJECT_ROOT
+from shared.crypto import encrypt_dict, decrypt_dict, is_enabled
+
 logger = logging.getLogger("ai-agent.connection-manager")
 
 AUTH_TYPES = ["none", "basic", "bearer", "oauth2", "api_key", "mtls"]
+
+# Encrypted-at-rest source store (inside the shared .agent-mappings volume so it
+# persists across ai-agent restarts). Only written when SAP_CRED_KEY is set.
+_CREDENTIALS_DIR = os.path.join(PROJECT_ROOT, ".agent-mappings", "credentials")
+_CREDENTIALS_FILE = os.path.join(_CREDENTIALS_DIR, "sources.json")
 
 
 class ConnectionManager:
@@ -21,7 +36,43 @@ class ConnectionManager:
 
     def __init__(self):
         self._sources: dict[str, dict[str, Any]] = {}
+        self._load()
 
+    # ── opt-in encrypted disk persistence ────────────────────────────────
+    def _load(self) -> None:
+        """Load the encrypted source store from disk when SAP_CRED_KEY is set."""
+        if not is_enabled():
+            return
+        if not os.path.exists(_CREDENTIALS_FILE):
+            return
+        try:
+            with open(_CREDENTIALS_FILE, "r", encoding="utf-8") as f:
+                token = f.read().strip()
+            if token:
+                data = decrypt_dict(token)
+                if isinstance(data, dict):
+                    self._sources = data
+                    logger.info(f"Loaded {len(self._sources)} encrypted source(s) from disk")
+        except Exception as e:
+            # Key rotated / file corrupt: start empty rather than crash. The user
+            # re-adds sources; nothing is lost (the old encrypted blob is still on disk).
+            logger.warning(f"Could not decrypt persisted sources (key changed?): {e}")
+
+    def _persist(self) -> None:
+        """Persist the source store encrypted to disk when SAP_CRED_KEY is set."""
+        if not is_enabled():
+            return
+        try:
+            os.makedirs(_CREDENTIALS_DIR, exist_ok=True)
+            token = encrypt_dict(self._sources)
+            if token is None:
+                return
+            with open(_CREDENTIALS_FILE, "w", encoding="utf-8") as f:
+                f.write(token)
+        except Exception as e:
+            logger.warning(f"Could not persist sources (encrypted): {e}")
+
+    # ── CRUD ──────────────────────────────────────────────────────────────
     def add_source(self, source: dict[str, Any]) -> dict[str, Any]:
         """
         Add or update a data source configuration.
@@ -32,6 +83,7 @@ class ConnectionManager:
         source["status"] = "configured"
         source["last_tested"] = None
         self._sources[source_id] = source
+        self._persist()
         logger.info(f"Source added/updated: {source_id} ({source.get('name', 'unnamed')})")
         return source
 
@@ -47,6 +99,7 @@ class ConnectionManager:
         """Remove a source. Returns True if it existed."""
         if source_id in self._sources:
             del self._sources[source_id]
+            self._persist()
             return True
         return False
 
@@ -82,7 +135,6 @@ class ConnectionManager:
         if source.get("extra_headers"):
             headers.update(source["extra_headers"])
 
-        import time
         start = time.time()
 
         try:
@@ -94,6 +146,7 @@ class ConnectionManager:
                         latency = round((time.time() - start) * 1000, 1)
                         source["status"] = "connected"
                         source["last_tested"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+                        self._persist()
                         return {
                             "success": True,
                             "status_code": resp.status_code,
@@ -108,6 +161,7 @@ class ConnectionManager:
                 latency = round((time.time() - start) * 1000, 1)
                 source["status"] = "connected"
                 source["last_tested"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+                self._persist()
                 return {
                     "success": True,
                     "status_code": resp.status_code,
