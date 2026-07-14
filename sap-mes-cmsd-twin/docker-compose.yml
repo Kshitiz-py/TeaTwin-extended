@@ -1,0 +1,172 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: factory-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: factory_digital_twin
+      MYSQL_USER: factory_user
+      MYSQL_PASSWORD: factory_pass
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./database/init.sql:/docker-entrypoint-initdb.d/01-init.sql
+      - ./database/seed_data.sql:/docker-entrypoint-initdb.d/02-seed.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpass"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  mock-sap-api:
+    build:
+      context: ..
+      dockerfile: sap-mes-cmsd-twin/Dockerfile.python
+    container_name: mock-sap-api
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_PORT: "3306"
+      MYSQL_USER: factory_user
+      MYSQL_PASSWORD: factory_pass
+      MYSQL_DATABASE: factory_digital_twin
+    depends_on:
+      mysql:
+        condition: service_healthy
+    command: ["python", "-m", "uvicorn", "mock_sap_api.main:app", "--host", "0.0.0.0", "--port", "8001"]
+
+  mock-mes-api:
+    build:
+      context: ..
+      dockerfile: sap-mes-cmsd-twin/Dockerfile.python
+    container_name: mock-mes-api
+    restart: unless-stopped
+    ports:
+      - "8002:8002"
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_PORT: "3306"
+      MYSQL_USER: factory_user
+      MYSQL_PASSWORD: factory_pass
+      MYSQL_DATABASE: factory_digital_twin
+    depends_on:
+      mysql:
+        condition: service_healthy
+    command: ["python", "-m", "uvicorn", "mock_mes_api.main:app", "--host", "0.0.0.0", "--port", "8002"]
+
+  ai-agent:
+    build:
+      context: ..
+      dockerfile: sap-mes-cmsd-twin/Dockerfile.python
+    container_name: ai-agent
+    restart: unless-stopped
+    ports:
+      - "8003:8003"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_PORT: "3306"
+      MYSQL_USER: factory_user
+      MYSQL_PASSWORD: factory_pass
+      MYSQL_DATABASE: factory_digital_twin
+      SAP_API_URL: http://mock-sap-api:8001/api/sap/v1
+      MES_API_URL: http://mock-mes-api:8002/api/mes/v1
+      CMSD_TWIN_URL: http://cmsd-twin-service:8000/api/cmsd/v1
+      CHROMA_PERSIST_DIR: /app/chromadb_data
+      # Disable auto-index on startup to prevent hanging on Ollama
+      AUTO_INDEX_ON_STARTUP: "0"
+      # Path where agent can find the CMSD twin codebase for code generation
+      CMSD_TWIN_REPO_PATH: /app/git-repo
+      # Fernet key for encrypting SAP credentials at rest (shared with cmsd-twin).
+      # Unset = dev/no-key mode (plaintext normalized auth in mapping source block).
+      SAP_CRED_KEY: ${SAP_CRED_KEY:-}
+    volumes:
+      - chromadb_data:/app/chromadb_data
+      - agent_mappings:/app/sap-mes-cmsd-twin/.agent-mappings
+      - ./ai_agent/.agent-reports:/app/sap-mes-cmsd-twin/ai_agent/.agent-reports
+      # Shared volume approach: mount repo .git for branch/commit operations
+      - ../.git:/app/git-repo/.git:rw
+      # Mount CMSD twin service source writable — agent modifies this code
+      - ./cmsd_twin_service:/app/git-repo/cmsd_twin_service
+      # Mount shared config writable (agent may update mapping configs)
+      - ./shared:/app/git-repo/shared
+      # NOTE: ai_agent source is intentionally NOT mounted in the git-repo.
+      # The agent MUST NOT be able to modify its own source code during code generation.
+      # Only cmsd_twin_service and shared config are writable targets.
+    depends_on:
+      mock-sap-api:
+        condition: service_started
+      mock-mes-api:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/api/agent/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: ["python", "-m", "uvicorn", "ai_agent.main:app", "--host", "0.0.0.0", "--port", "8003"]
+
+  cmsd-twin-service:
+    build:
+      context: ..
+      dockerfile: sap-mes-cmsd-twin/Dockerfile.python
+    container_name: cmsd-twin-service
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_PORT: "3306"
+      MYSQL_USER: factory_user
+      MYSQL_PASSWORD: factory_pass
+      MYSQL_DATABASE: factory_digital_twin
+      SAP_API_URL: http://mock-sap-api:8001/api/sap/v1
+      MES_API_URL: http://mock-mes-api:8002/api/mes/v1
+      POLL_INTERVAL: "10"
+      # Fernet key for decrypting SAP credentials at runtime (shared with ai-agent).
+      SAP_CRED_KEY: ${SAP_CRED_KEY:-}
+    depends_on:
+      mock-sap-api:
+        condition: service_started
+      mock-mes-api:
+        condition: service_started
+      ai-agent:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/cmsd/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      # Hot-reload: mount writable source dirs so agent changes are picked up
+      - ./cmsd_twin_service:/app/sap-mes-cmsd-twin/cmsd_twin_service
+      - ./shared:/app/sap-mes-cmsd-twin/shared
+      - agent_mappings:/app/sap-mes-cmsd-twin/.agent-mappings
+      - ./ai_agent/config.py:/app/sap-mes-cmsd-twin/ai_agent/config.py
+    command: ["python", "-m", "uvicorn", "cmsd_twin_service.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+  web-dashboard:
+    build:
+      context: ./web_dashboard
+      dockerfile: Dockerfile.node
+    container_name: cmsd-dashboard
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    depends_on:
+      - cmsd-twin-service
+      - ai-agent
+    volumes:
+      - ./web_dashboard/src:/app/src
+    environment:
+      VITE_CMSD_API_URL: http://cmsd-twin-service:8000/api/cmsd/v1
+      VITE_AGENT_API_URL: http://ai-agent:8003/api/agent/v1
+
+volumes:
+  mysql_data:
+  chromadb_data:
+  agent_mappings:
