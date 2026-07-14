@@ -1,0 +1,463 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<rng:grammar xmlns:rng="http://relaxng.org/ns/structure/1.0"
+	xmlns:a="http://relaxng.org/ns/compatibility/annotations/1.0"
+	xmlns:sch="http://www.ascc.net/xml/schematron" 
+	datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes">
+	
+	<!--	This is the "superclass" for all entity reference classes
+		-->
+	<rng:define name="AbstractEntityReference" combine="choice">
+		<rng:notAllowed/>
+	</rng:define>
+	
+	<!--	This represents a group of atributes present in members of the 
+		AbstractEntityReference substitutiongroup
+		-->
+	<rng:define name="DocumentIdentifier">
+		<rng:optional>
+			<rng:element name="DocumentIdentifier">
+				<rng:ref name="Identifier"/>
+			</rng:element>
+		</rng:optional>
+	</rng:define>
+	
+	<!-- *****************************************************************************
+		
+		Definitions for basic entity reference classes
+				
+	    *****************************************************************************
+	    -->
+	
+	<rng:define name="AbstractEntityReference" combine="choice">
+		<rng:element name="BillOfMaterialsReference">
+			<rng:ref name="BillOfMaterialsReference"/>
+		</rng:element>
+	</rng:define>
+	
+	<rng:define name="BillOfMaterialsReference">
+		<rng:interleave>
+			<rng:ref name="DocumentIdentifier"/>
+			<rng:element name="BillOfMaterialsIdentifier">
+				<rng:ref name="Identifier"/>
+			</rng:element>
+		</rng:interleave>
+	</rng:define>
+	
+	<rng:define name="AbstractEntityReference" combine="choice">
+		
+		<rng:element name="DistributionDefinitionReference">
+			<rng:ref name="DistributionDefinitionReference"/>
+		</rng:element>
+	</rng:define>
+	<rng:define name="DistributionDefinitionReference">
+		<rng:interleave>
+			<rng:ref name="DocumentIdentifier"/>
+			<rng:element name="DistributionDefinitionIdentifier">
+				<rng:ref name="Identifier"/>
+			</rng:element>
+		</rng:interleave>
+	</rng:define>	
+	
+	<rng:define name="AbstractEntityReference" combine="choice">
+		<rng:element name="InventoryItemReference">
+			<rng:ref name="InventoryItemReference"/>
+		</rng:element>
+	</rng:define>
+	<rng:define name="InventoryItemReference">
+		<rng:interleave>
+			<rng:ref name="DocumentIdentifier"/>
+			<rng:element name="InventoryItemIdentifier">
+				<rng:ref name="Identifier"/>
+			</rng:element>
+		</rng:interleave>
+	</rng:define>
+	<rng:define name="AbstractEntityReference" combine="choice">		
+		<rng:element name="InventoryItemClassReference">
+			<rng:ref name="InventoryItemClassReference"/>
+		</rng:element>
+	</rng:define>
+	<rng:define name="InventoryItemClassReference">
+		<rng:interleave>
+			<rng:ref name="DocumentIdentifier"/>
+			<rng:element name="InventoryItemClassIdentifier">
+				<rng:ref name="Identifier"/>
+			</rng:element>
+		</rng:interleave>
+	</rng:define>
+	
+	
+	<rng:define name="AbstractEntityReference" combine="choice">		
+		<rng:element name="JobReference">
+			<rng:ref name="JobReference"/>
+		</rng:element>
+	</rng:define>
+	<rng:define name="JobReference">
+		<rng:interleave>
+			<rng:ref name="DocumentIdentifier"/>
+			<rng:element name="JobIdentifier">
+				<rng:ref name="Identifier"/>
+			</rng:element>
+		</rng:interleave>
+	</rng:define>
+	
+	<rng:define name="AbstractEntityReference" combine="choice">		
+		<rng:element name="LayoutElementReference">
+			<rng:ref name="LayoutElementReference"/>
+		</rng:element>
+	</rng:define>
+	<rng:define name="LayoutElementReference">
+		<rng:interleave>
+			<rng:ref name="DocumentIdentifier"/>
+			<rng:element name="LayoutElementIdentifier">
+				<rng:ref name="Identifier"/>
+			</rng:element>
+		</rng:interleave>
+	</rng:define>	
+	
+	<rng:define name="AbstractEntityReference" combine="choice">		
+		<rng:element name="MaintenancePlanReference">
+			<rng:ref name="MaintenancePlanReference"/>
+		</rng:element>
+	</rng:define>
+	<rng:define name="MaintenancePlanReference">
+		<rng:interleave>
+			<rng:ref name="DocumentIdentifier"/>
+			<rng:element name="MaintenancePlanIdentifier">
+				<rng:ref name="Identifier"/>
+			</rng:element>
+		</rng:interleave>
+	</rng:define>
+	
+	<rng:define name="AbstractEntityReference" combine="choice">		
+		<rng:element name="PartReference">
+			<rng:ref name="PartReference"/>
+		</rng:element>
+	</rng:define>
+	<rng:define name="PartReference">
+		<rng:interleave>
+			<rng:ref name="DocumentIdentifier"/>
+			<rng:element name="PartIdentifier">
+				<rng:ref name="Identifier"/>
+			</rng:element>
+		</rng:interleave>
+	</rng:define>
+	
+	<rng:define name="AbstractEntityReference" combine="choice">		
+		<rng:element name="PartTypeReference">
+			<rng:ref name="PartTypeReference"/>
+		</rng:element>
+	</rng:define>
+	<rng:define name="PartTypeReference">
+		<rng:interleave>
+			<rng:ref name="DocumentIdentifier"/>
+			<rng:element name="PartTypeIdentifier">
+				<rng:ref name="Identifier"/>
+			</rng:element>
+		</rng:interleave>
+	</rng:define>
+	
+	
+	<rng:define name="AbstractEntityReference" combine="choice">		
+		<rng:element name="ProcessPlanReference">
+			<rng:ref name="ProcessPlanReference"/>
+		</rng:element>
+	</rng:define>
+	<rng:define name="ProcessPlanReference">
+		<rng:interleave>
+			<rng:ref name="DocumentIdentifier"/>
+			<rng:element name="ProcessPlanIdentifier">
+				<rng:ref name="Identifier"/>
+			</rng:element>
+		</rng:interleave>
+	</rng:define>
+	
+	<rng:define name="AbstractEntityReference" combine="choice">		
+		<rng:element name="PropertyDescriptionReference">
+			<rng:ref name="PropertyDescriptionReference"/>
+		</rng:element>
+	</rng:define>
+	<rng:define name="PropertyDescriptionReference">
+		<rng:interleave>
+			<rng:ref name="DocumentIdentifier"/>
+			<rng:element name="PropertyDescriptionIdentifier">
+				<rng:ref name="Identifier"/>
+			</rng:element>
+		</rng:interleave>
+	</rng:define>
+	
+	<rng:define name="AbstractEntityReference" combine="choice">
+		<rng:element name="ReferenceMaterialReference">
+			<rng:ref name="ReferenceMaterialReference"/>
+		</rng:element>
+
+	</rng:define>
+	
+	<rng:define name="ReferenceMaterialReference">
+		<rng:interleave>
+			<rng:ref name="DocumentIdentifier"/>
+			<rng:element name="ReferenceMaterialIdentifier">
+				<rng:ref name="Identifier"/>
+			</rng:element>
+		</rng:interleave>
+	</rng:define>
+	
+	
+	<rng:define name="AbstractEntityReference" combine="choice">
+		<rng:element name="ResourceClassReference">
+			<rng:ref name="ResourceClassReference"/>
+		</rng:element>	
+	</rng:define>
+
+	<rng:define name="ResourceClassReference">
+		<rng:interleave>
+			<rng:ref name="DocumentIdentifier"/>
+			<rng:element name="ResourceClassIdentifier">
+				<rng:ref name="Identifier"/>
+			</rng:element>
+		</rng:interleave>
+	</rng:define>
+	
+	<rng:define name="AbstractEntityReference" combine="choice">		
+		<rng:element name="ResourceReference">
+			<rng:ref name="ResourceReference"/>
+		</rng:element>
+	</rng:define>
+	<rng:define name="ResourceReference">
+		<rng:interleave>
+			<rng:ref name="DocumentIdentifier"/>
+			<rng:element name="ResourceIdentifier">
+				<rng:ref name="Identifier"/>
+			</rng:element>
+		</rng:interleave>
+	</rng:define>
+	
+	<rng:define name="AbstractEntityReference" combine="choice">		
+		<rng:element name="SetupChangeoverReference">
+			<rng:ref name="SetupChangeoverReference"/>
+		</rng:element>
+	</rng:define>
+	<rng:define name="SetupChangeoverReference">
+		<rng:interleave>
+			<rng:ref name="DocumentIdentifier"/>
+			<rng:element name="SetupChangeoverIdentifier">
+				<rng:ref name="Identifier"/>
+			</rng:element>
+		</rng:interleave>
+	</rng:define>
+	
+	<rng:define name="AbstractEntityReference" combine="choice">	
+		<rng:element name="SetupDefinitionReference">
+			<rng:ref name="SetupDefinitionReference"/>
+		</rng:element>
+	</rng:define>
+	<rng:define name="SetupDefinitionReference">
+		<rng:interleave>
+			<rng:ref name="DocumentIdentifier"/>
+			<rng:element name="SetupDefinitionIdentifier">
+				<rng:ref name="Identifier"/>
+			</rng:element>
+		</rng:interleave>
+	</rng:define>
+	
+	
+	<!-- *****************************************************************************
+		
+		Definitions for complex entity reference classes
+		
+				
+	    *****************************************************************************
+	    -->
+	
+	<rng:define name="AbstractEntityReference" combine="choice">
+		<rng:element name="CalendarReference">
+			<rng:ref name="CalendarReference"/>
+		</rng:element>
+	</rng:define>
+	<rng:define name="CalendarReference">
+		<a:documentation>
+			<sch:pattern xmlns:xs="http://www.w3.org/2001/XMLSchema"
+				name="CalendarReference">
+				<sch:rule context="element(*, CalendarReference)">
+					<sch:assert test="count(ShiftIdentifier) + count(ShiftScheduleIdentifier) + count(HolidayIdentifier) &lt; 2">At
+						most one of [ShiftIdentifier, ShiftScheduleIdentifier, HolidayIdentifier] must be present</sch:assert>
+				</sch:rule>
+			</sch:pattern>
+		</a:documentation>
+		<rng:interleave>
+			<rng:ref name="DocumentIdentifier"/>
+			<rng:element name="CalendarIdentifier">
+				<rng:ref name="Identifier"/>
+			</rng:element>
+			<rng:optional>
+				<rng:element name="ShiftScheduleIdentifier">
+					<rng:ref name="Identifier"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="ShiftIdentifier">
+					<rng:ref name="Identifier"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="HolidayIdentifier">
+					<rng:ref name="Identifier"/>
+				</rng:element>
+			</rng:optional>
+		</rng:interleave>
+	</rng:define>
+	
+	<rng:define name="AbstractEntityReference" combine="choice">		
+		<rng:element name="OrderInformationReference">
+			<rng:ref name="OrderInformationReference"/>
+		</rng:element>
+	</rng:define>
+	<rng:define name="OrderInformationReference">
+		<rng:interleave>
+			<rng:ref name="DocumentIdentifier"/>
+			<rng:element name="OrderIdentifier">
+				<rng:ref name="Identifier"/>
+			</rng:element>
+			<rng:optional>
+				<rng:element name="OrderLineIdentifier">
+					<rng:ref name="Identifier"/>
+				</rng:element>
+			</rng:optional>
+		</rng:interleave>
+	</rng:define>
+	
+	
+	
+	<rng:define name="AbstractEntityReference" combine="choice">		
+		<rng:element name="SkillReference">
+			<rng:ref name="SkillReference"/>
+		</rng:element>
+	</rng:define>
+	<rng:define name="SkillReference">
+		<rng:interleave>
+			<rng:ref name="DocumentIdentifier"/>
+			<rng:element name="SkillDefinitionIdentifier">
+				<rng:ref name="Identifier"/>
+			</rng:element>
+			<rng:optional>
+				<rng:element name="SkillLevelIdentifier">
+					<rng:ref name="Identifier"/>
+				</rng:element>
+			</rng:optional>
+		</rng:interleave>
+	</rng:define>
+	
+	<rng:define name="AbstractEntityReference" combine="choice">	
+		<rng:element name="ScheduleInformationReference">
+			<rng:ref name="ScheduleInformationReference"/>
+		</rng:element>
+	</rng:define>
+	<rng:define name="ScheduleInformationReference">
+		<rng:interleave>
+			<rng:ref name="DocumentIdentifier"/>
+			<rng:element name="ScheduleIdentifier">
+				<rng:ref name="Identifier"/>
+			</rng:element>
+			<rng:optional>
+				<rng:element name="ScheduleItemIdentifier">
+					<rng:ref name="Identifier"/>
+				</rng:element>
+			</rng:optional>
+		</rng:interleave>
+	</rng:define>
+	
+	<rng:define name="AbstractEntityReference" combine="choice">		
+		<rng:element name="ProcessReference">
+			<rng:ref name="ProcessReference"/>
+		</rng:element>
+	</rng:define>
+	<rng:define name="ProcessReference">
+		<a:documentation>
+			<sch:pattern xmlns:xs="http://www.w3.org/2001/XMLSchema"
+				name="ProcessReference">
+				<sch:rule context="element(*, ProcessReference)">
+					<sch:assert test="count(ProcessPlanIdentifier) + count(ProcessIdentifier)  &gt; 0">At
+						least one of [ProcessPlanIdentifier, ProcessIdentifier] must be present</sch:assert>
+				</sch:rule>
+			</sch:pattern>
+		</a:documentation>
+		<rng:interleave>
+			<rng:ref name="DocumentIdentifier"/>
+			<rng:optional>
+				<rng:element name="ProcessPlanIdentifier">
+					<rng:ref name="Identifier"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="ProcessIdentifier">
+					<rng:ref name="Identifier"/>
+				</rng:element>
+			</rng:optional>
+		</rng:interleave>
+	</rng:define>
+	
+	
+	<rng:define name="AbstractEntityReference" combine="choice">		
+		<rng:element name="MaintenanceProcessReference">
+			<rng:ref name="MaintenanceProcessReference"/>
+		</rng:element>
+	</rng:define>
+	<rng:define name="MaintenanceProcessReference">
+		<a:documentation>
+			<sch:pattern xmlns:xs="http://www.w3.org/2001/XMLSchema"
+				name="MaintenanceProcessReference">
+				<sch:rule context="element(*, MaintenanceProcessReference)">
+					<sch:assert test="count(MaintenancePlanIdentifier) + count(MaintenanceProcessIdentifier)  &gt; 0">At
+						least one of [MaintenancePlanIdentifier, MaintenanceProcessIdentifier] must be present</sch:assert>
+				</sch:rule>
+			</sch:pattern>
+		</a:documentation>
+		<rng:interleave>
+			<rng:ref name="DocumentIdentifier"/>
+			<rng:optional>
+				<rng:element name="MaintenancePlanIdentifier">
+					<rng:ref name="Identifier"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="MaintenanceProcessIdentifier">
+					<rng:ref name="Identifier"/>
+				</rng:element>
+			</rng:optional>
+		</rng:interleave>
+	</rng:define>			
+	
+	<rng:define name="AbstractEntityReference" combine="choice">		
+		<rng:element name="BillOfMaterialsComponentReference">
+			<rng:ref name="BillOfMaterialsComponentReference"/>
+		</rng:element>
+	</rng:define>
+	<rng:define name="BillOfMaterialsComponentReference">
+		<a:documentation>
+			<sch:pattern xmlns:xs="http://www.w3.org/2001/XMLSchema"
+				name="BillOfMaterialsComponentReference">
+				<sch:rule context="element(*, BillOfMaterialsComponentReference)">
+					<sch:assert test="count(BillOfMaterialsIdentifier) + count(BillOfMaterialsComponentIdentifier)  &gt; 0">At
+						least one of [BillOfMaterialsIdentifier, BillOfMaterialsComponentIdentifier] must be present</sch:assert>
+				</sch:rule>
+			</sch:pattern>
+		</a:documentation>
+		<rng:interleave>
+			<rng:ref name="DocumentIdentifier"/>
+			<rng:optional>
+				<rng:element name="BillOfMaterialsIdentifier">
+					<rng:ref name="Identifier"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="BillOfMaterialsComponentIdentifier">
+					<rng:ref name="Identifier"/>
+				</rng:element>
+			</rng:optional>
+		</rng:interleave>
+	</rng:define>
+	
+	
+	
+	
+</rng:grammar>

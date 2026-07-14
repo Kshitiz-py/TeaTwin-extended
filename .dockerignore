@@ -1,0 +1,11 @@
+__pycache__
+*.pyc
+*.pyo
+.git
+.gitignore
+*.md
+!Data_requirements_for_ASMG.md
+venv/
+env/
+.venv/
+node_modules/

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!--<rng:grammar xmlns:rng="http://relaxng.org/ns/structure/1.0"
+	xmlns:a="http://relaxng.org/ns/compatibility/annotations/1.0"
+	xmlns="urn:cmsd:main" ns="urn:cmsd:main"
+	datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes">-->
+
+<rng:grammar xmlns:rng="http://relaxng.org/ns/structure/1.0"
+	xmlns:a="http://relaxng.org/ns/compatibility/annotations/1.0"	
+	datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes">
+	
+	<rng:start>
+		
+		<rng:element>
+			<rng:name ns="">CMSDDocument</rng:name>
+			<rng:ref name="CMSDDocument"/>
+		</rng:element>
+		
+	</rng:start>
+	
+	<rng:include href="Support.rng"/>
+	<rng:include href="Part.rng"/>
+	<rng:include href="ProductionPlanning.rng"/>
+	<rng:include href="Resource.rng"/>
+	<rng:include href="ProductionOperations.rng"/>
+	<rng:include href="Layout.rng"/>
+	
+</rng:grammar>

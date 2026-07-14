@@ -1,0 +1,538 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<rng:grammar xmlns:rng="http://relaxng.org/ns/structure/1.0"
+	xmlns:a="http://relaxng.org/ns/compatibility/annotations/1.0"
+	xmlns:sch="http://www.ascc.net/xml/schematron"
+	datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes">
+	
+	
+	<!-- *****************************************************************************
+		
+		Definitions for LayoutElement and related elements
+				
+	    *****************************************************************************
+	    -->
+	<rng:define name="LayoutElement">
+		
+		<rng:interleave>
+			<rng:ref name="IdentifiableEntityFrontGroup"/>
+			<rng:optional>
+				<rng:element name="Name">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="AssociatedResource">
+					<rng:ref name="ResourceReference"/>
+				</rng:element>
+			</rng:optional>
+			<rng:element name="Boundary">
+				<rng:ref name="BoundaryDefinition"/>
+			</rng:element>
+			<rng:ref name="IdentifiableEntityBackGroup"/>
+		</rng:interleave>
+	</rng:define>
+	 
+	
+	<rng:define name="UniqueEntity" combine="choice">
+		<rng:element name="LayoutObject">
+			<rng:ref name="LayoutObject"/>
+		</rng:element>
+	</rng:define>
+	<rng:define name="LayoutObject">
+		<rng:interleave>
+			<rng:ref name="LayoutElement"/>
+			<rng:optional>
+				<rng:element name="Type">
+					<rng:ref name="ResourceType"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="Shape">
+					<rng:ref name="ShapeDescription"/>
+				</rng:element>
+			</rng:optional>
+		</rng:interleave>
+	</rng:define>
+	 
+	<rng:define name="UniqueEntity" combine="choice">
+		<rng:element name="Layout">
+			<rng:ref name="Layout"/>
+		</rng:element>
+	</rng:define>
+	<rng:define name="Layout">
+		<rng:interleave>
+			<rng:ref name="LayoutElement"/>
+			<rng:zeroOrMore>
+				<rng:element name="Placement">
+					<rng:ref name="Placement"/>
+				</rng:element>
+			</rng:zeroOrMore>
+		</rng:interleave>
+	</rng:define>
+	 
+	<rng:define name="Placement">
+		<rng:interleave>
+			<rng:ref name="LayoutElementReference"/>
+			<rng:element name="Location">
+				<rng:ref name="Coordinate3D"/>
+			</rng:element>
+			<rng:optional>
+				<rng:element name="Transformations">
+					<rng:ref name="TransformationList"/>
+				</rng:element>
+			</rng:optional>
+		</rng:interleave>
+	</rng:define>
+	 
+	 
+	 <!-- *****************************************************************************
+		
+		Definition for Shape Description 
+				
+	    *****************************************************************************
+	    -->
+	    	 
+	<rng:define name="ShapeDescription">
+		<a:documentation>
+			<sch:pattern xmlns:xs="http://www.w3.org/2001/XMLSchema"
+				name="ShapeDescription check">
+				<sch:rule context="element(*, ShapeDescription)[BasicShape]">
+					<sch:assert test="ShapeType = 'basic'">If a BasicShape element is present in
+						a ShapeDescription element, the ShapeType must be 'basic'</sch:assert>
+				</sch:rule>
+				<sch:rule context="element(*, ShapeDescription)[Graphic]">
+					<sch:assert test="ShapeType = 'graphic'">If a Graphic element is present in
+						a ShapeDescription element, the ShapeType must be 'graphic'</sch:assert>
+				</sch:rule>
+				<sch:rule context="element(*, ShapeDescription)[Segment]">
+					<sch:assert test="ShapeType = 'segment'">If a Segment element is present in
+						a ShapeDescription element, the ShapeType must be 'segment'</sch:assert>
+				</sch:rule>
+				<sch:rule context="element(*, ShapeDescription)[TextualAnnotation]">
+					<sch:assert test="ShapeType = 'text'">If a TextualAnnotation element is
+						present in a ShapeDescription element, the ShapeType must be 'text'</sch:assert>
+				</sch:rule>
+			</sch:pattern>
+		</a:documentation>
+		<rng:interleave>
+			<rng:element name="ShapeType">
+				<rng:ref name="ShapeDescriptionType"/>
+			</rng:element>
+			<rng:choice>
+				<rng:optional>
+					<rng:element name="BasicShape">
+						<rng:choice>
+							<rng:ref name="Box"/>
+							<rng:ref name="Circle"/>
+							<rng:ref name="Polygon"/>
+						</rng:choice>
+					</rng:element>
+				</rng:optional>
+				<rng:optional>
+					<rng:element name="Graphic">						
+						<rng:choice>
+							<rng:ref name="ImageGraphic"/>
+							<rng:ref name="ModelGraphic"/>
+						</rng:choice>
+					</rng:element>
+				</rng:optional>
+				<rng:zeroOrMore>
+					<rng:element name="Segment">						
+						<rng:ref name="CurvedSegment"/>
+						<rng:ref name="StraightSegment"/>
+					</rng:element>
+				</rng:zeroOrMore>
+				<rng:optional>
+					<rng:element name="TextualAnnotation">
+						<rng:ref name="TextualAnnotation"/>
+					</rng:element>
+				</rng:optional>
+			</rng:choice>
+		</rng:interleave>
+	</rng:define>
+	
+	 <!-- *****************************************************************************
+		
+		Definitions for TransformationList and related elements 
+				
+	    *****************************************************************************
+	    -->
+	
+	<rng:define name="TransformationList">
+		<rng:oneOrMore>
+			
+			<rng:ref name="TransformationOperation"/>
+			
+		</rng:oneOrMore>
+	</rng:define>
+	
+	<rng:define name="TransformationOperation" combine="choice">
+		<rng:element name="Rotation">
+			<rng:ref name="Rotation"/>
+		</rng:element>
+	</rng:define>
+	<rng:define name="Rotation">
+		<a:documentation>
+			<sch:pattern xmlns:xs="http://www.w3.org/2001/XMLSchema" name="Rotation">
+				<sch:rule context="element(*, Rotation)">
+					<sch:assert test="count(*) &gt; 1">The Rotation element must contain at
+						least one of the elements XDegree, YDegree, or ZDegree.</sch:assert>
+				</sch:rule>
+			</sch:pattern>
+		</a:documentation>
+		
+		<rng:interleave>
+			<rng:optional>
+				<rng:element name="XDegree">
+					<rng:ref name="Decimal"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="YDegree">
+					<rng:ref name="Decimal"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="ZDegree">
+					<rng:ref name="Decimal"/>
+				</rng:element>
+			</rng:optional>
+			<rng:element name="Origin">
+				<rng:ref name="Coordinate3D"/>
+			</rng:element>
+		</rng:interleave>
+	</rng:define>
+
+	<rng:define name="TransformationOperation" combine="choice">
+		<rng:element name="Translation">
+			<rng:ref name="Translation"/>
+		</rng:element>
+	</rng:define>
+	
+	<rng:define name="Translation">
+		<a:documentation>
+			<sch:pattern xmlns:xs="http://www.w3.org/2001/XMLSchema" name="Translation">
+				<sch:rule context="element(*, Translation)">
+					<sch:assert test="count(*) &gt; 0">The Translation element may not be empty.</sch:assert>
+				</sch:rule>
+			</sch:pattern>
+		</a:documentation>
+
+		<rng:interleave>
+			<rng:optional>
+				<rng:element name="XOffset">
+					<rng:ref name="Decimal"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="YOffset">
+					<rng:ref name="Decimal"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="ZOffset">
+					<rng:ref name="Decimal"/>
+				</rng:element>
+			</rng:optional>
+		</rng:interleave>
+	</rng:define>
+	 
+	<rng:define name="TransformationOperation" combine="choice">
+		<rng:element name="Scaling">
+			<rng:ref name="Scaling"/>
+		</rng:element>
+	</rng:define>
+	<rng:define name="Scaling">
+		<a:documentation>
+			<sch:pattern xmlns:xs="http://www.w3.org/2001/XMLSchema" name="Scaling">
+				<sch:rule context="element(*, Scaling)">
+					<sch:assert test="count(*) &gt; 0">The Scaling element may not be empty.</sch:assert>
+				</sch:rule>
+			</sch:pattern>
+		</a:documentation>
+
+		<rng:interleave>
+			<rng:optional>
+				<rng:element name="XPercent">
+					<rng:ref name="Decimal"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="YPercent">
+					<rng:ref name="Decimal"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="ZPercent">
+					<rng:ref name="Decimal"/>
+				</rng:element>
+			</rng:optional>
+		</rng:interleave>
+	</rng:define>
+	 
+	  <!-- *****************************************************************************
+		
+		Definitions for Graphic Description and related elements 
+				
+	    *****************************************************************************
+	    -->
+	 
+	 <rng:define name="GraphicDescription">
+		<rng:interleave>
+			<rng:element name="GraphicType">
+				<rng:ref name="GraphicDescriptionType"/>
+			</rng:element>
+			<rng:element name="FileName">
+				<rng:ref name="URI"/>
+			</rng:element>
+			<rng:element name="FileType">
+				<rng:ref name="String"/>
+			</rng:element>
+			<rng:optional>
+				<rng:element name="Transformations">
+					<rng:ref name="TransformationList"/>
+				</rng:element>
+			</rng:optional>
+			<rng:zeroOrMore>
+				<rng:element name="Property">
+					<rng:ref name="Property"/>
+				</rng:element>
+			</rng:zeroOrMore>
+		</rng:interleave>
+	</rng:define>
+	
+	<rng:define name="ModelGraphic">
+		<rng:interleave>
+			<rng:ref name="GraphicDescription"/>
+			<rng:element name="ModelUnit">
+				<rng:ref name="LayoutLengthUnit"/>
+			</rng:element>
+			<rng:element name="ModelDimension">
+				<rng:ref name="SpatialDimension"/>
+			</rng:element>
+		</rng:interleave>
+	</rng:define>
+	
+	<rng:define name="ImageGraphic">
+		<rng:interleave>
+			<rng:ref name="GraphicDescription"/>
+			<rng:element name="ImageResolution">
+				<rng:ref name="ImageResolution"/>
+			</rng:element>
+			<rng:element name="ImageDimension">
+				<rng:ref name="SpatialDimension"/>
+			</rng:element>
+		</rng:interleave>
+	</rng:define>
+	 
+	   <!-- *****************************************************************************
+		
+		Definition for TextualAnnotation
+				
+	    *****************************************************************************
+	    -->
+	 
+	<rng:define name="TextualAnnotation">
+		<rng:interleave>
+			<rng:optional>
+				<rng:element name="AttachPoint">
+					<rng:ref name="Coordinate3D"/>
+				</rng:element>
+			</rng:optional>
+			<rng:element name="Text">
+				<rng:ref name="String"/>
+			</rng:element>
+			<rng:optional>
+				<rng:element name="TextAnchorLocation">
+					<rng:ref name="TextAnchorLocation"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="Color">
+					<rng:ref name="ColorDefinition"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="Style">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="TextAngle">
+					<rng:ref name="Decimal"/>
+				</rng:element>
+			</rng:optional>
+			<rng:zeroOrMore>
+				<rng:element name="Property">
+					<rng:ref name="Property"/>
+				</rng:element>
+			</rng:zeroOrMore>
+		</rng:interleave>
+	</rng:define>
+	
+	  <!-- *****************************************************************************
+		
+		Definitions for BasicShape and related elements 
+				
+	    *****************************************************************************
+	    -->
+	
+	<rng:define name="BasicShape">
+		<rng:interleave>
+			<rng:element name="Type">
+				<rng:ref name="BasicShapeType"/>
+			</rng:element>
+			<rng:optional>
+				<rng:element name="Height">
+					<rng:ref name="Decimal"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="Color">
+					<rng:ref name="ColorHighlight"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="Label">
+					<rng:ref name="ShapeLabelDefinition"/>
+				</rng:element>
+			</rng:optional>
+		</rng:interleave>
+	</rng:define>
+	
+	<rng:define name="Box">
+		<rng:interleave>
+			<rng:ref name="BasicShape"/>
+			<rng:element name="Width">
+				<rng:ref name="Decimal"/>
+			</rng:element>
+			<rng:element name="Depth">
+				<rng:ref name="Decimal"/>
+			</rng:element>
+		</rng:interleave>
+	</rng:define>
+	
+	<rng:define name="Circle">
+		<rng:interleave>
+			<rng:ref name="BasicShape"/>
+			<rng:element name="Center">
+				<rng:ref name="Coordinate2D"/>
+			</rng:element>
+			<rng:element name="Radius">
+				<rng:ref name="Decimal"/>
+			</rng:element>
+			<rng:optional>
+				<rng:element name="Angle">
+					<rng:ref name="Decimal"/>
+				</rng:element>
+			</rng:optional>
+		</rng:interleave>
+	</rng:define>
+	 
+	<rng:define name="Polygon">
+		<a:documentation>
+			<sch:pattern xmlns:xs="http://www.w3.org/2001/XMLSchema" name="CMSDDocument">
+				<sch:rule context="element(*, Polygon)">
+					<sch:assert test="count(Point) &gt; 2">A Polygon element must have at least 3 Point children</sch:assert>
+				</sch:rule>
+			</sch:pattern>
+		</a:documentation>
+		<rng:interleave>
+			<rng:ref name="BasicShape"/>
+			<rng:oneOrMore>
+				<rng:element name="Point">
+					<rng:ref name="Coordinate2D"/>
+				</rng:element>
+			</rng:oneOrMore>
+		</rng:interleave>
+	</rng:define>
+	
+	
+	
+	  <!-- *****************************************************************************
+		
+		Definitions for SegmentShape and related elements 
+				
+	    *****************************************************************************
+	    -->
+	
+	<rng:define name="SegmentShape">
+		<rng:interleave>
+			<rng:element name="Type">
+				<rng:ref name="SegmentType"/>
+			</rng:element>
+			<rng:optional>
+				<rng:element name="SegmentNumber">
+					<rng:ref name="Identifier"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="Description">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<rng:element name="Base">
+				<rng:ref name="BaseLocation"/>
+			</rng:element>
+			<rng:element name="Start">
+				<rng:ref name="Coordinate2D"/>
+			</rng:element>
+			<rng:element name="Width">
+				<rng:ref name="Decimal"/>
+			</rng:element>
+			<rng:optional>
+				<rng:element name="StartHeight">
+					<rng:ref name="Decimal"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="EndHeight">
+					<rng:ref name="Decimal"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="TrackWidth">
+					<rng:ref name="Decimal"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="Color">
+					<rng:ref name="ColorHighlight"/>
+				</rng:element>
+			</rng:optional>
+			<rng:zeroOrMore>
+				<rng:element name="ReferenceMaterial">
+					<rng:ref name="ReferenceMaterialReference"/>
+				</rng:element>
+			</rng:zeroOrMore>
+			<rng:zeroOrMore>
+				<rng:element name="Property">
+					<rng:ref name="Property"/>
+				</rng:element>
+			</rng:zeroOrMore>
+		</rng:interleave>
+	</rng:define>
+	
+	
+	<rng:define name="StraightSegment">
+		<rng:interleave>
+			<rng:ref name="SegmentShape"/>
+			<rng:element name="End">
+				<rng:ref name="Coordinate2D"/>
+			</rng:element>
+		</rng:interleave>
+	</rng:define>
+	
+	<rng:define name="CurvedSegment">
+		<rng:interleave>
+			<rng:ref name="SegmentShape"/>
+			<rng:element name="RotationPoint">
+				<rng:ref name="Coordinate2D"/>
+			</rng:element>
+			<rng:element name="RotationAngle">
+				<rng:ref name="Decimal"/>
+			</rng:element>
+		</rng:interleave>
+	</rng:define>
+</rng:grammar>

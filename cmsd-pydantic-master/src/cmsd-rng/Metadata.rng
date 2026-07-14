@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<rng:grammar xmlns:rng="http://relaxng.org/ns/structure/1.0"
+	xmlns:a="http://relaxng.org/ns/compatibility/annotations/1.0"
+	xmlns:sch="http://www.ascc.net/xml/schematron"
+	datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes">
+	<!--<rng:start>
+		<rng:ref name="PropertyDescription"/>
+	</rng:start>-->
+	<!-- <rng:define name="PropertyDescription">
+      <rng:element name="PropertyDescription">
+         <rng:ref name="PropertyDescription"/>
+      </rng:element>
+   </rng:define>-->
+	<rng:define name="PropertyDescription">
+		<a:documentation>
+			<sch:pattern xmlns:xs="http://www.w3.org/2001/XMLSchema"
+				name="PropertyDescription">
+				<sch:rule
+					context="element(*, PropertyDescription)/PropertyDataTypeDescription">
+					<assert
+						test="count(//PropertyDataType[. = current()//PropertyDataType ] ) = 1">
+						Each PropertyDataTypeDescription within a PropertyDescription must have a
+						unique PropertyDataType value!</assert>
+				</sch:rule>
+			</sch:pattern>
+		</a:documentation>
+		<rng:interleave>
+			<rng:optional>
+				<rng:element name="Identifier">
+					<rng:ref name="Identifier"/>
+				</rng:element>
+			</rng:optional>
+			<rng:element name="Name">
+				<rng:ref name="String"/>
+			</rng:element>
+			<rng:optional>
+				<rng:element name="Description">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<rng:element name="ParentEntityName">
+				<rng:ref name="PropertyExtensibleEntity"/>
+			</rng:element>
+			<rng:optional>
+				<rng:element name="UnitType">
+					<rng:ref name="UnitTypeName"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="PropertyCardinality">
+					<rng:ref name="PropertyCardinality"/>
+				</rng:element>
+			</rng:optional>
+			<rng:element name="PropertyDataTypeDescription">
+				<rng:ref name="PropertyDataTypeDescription"/>
+			</rng:element>
+		</rng:interleave>
+	</rng:define>
+	<!-- <rng:start>
+      <rng:ref name="PropertyDataTypeDescription"/>
+   </rng:start>-->
+	<!--<rng:define name="PropertyDataTypeDescription">
+		<rng:element name="PropertyDataTypeDescription">
+			<rng:ref name="PropertyDataTypeDescription"/>
+		</rng:element>
+	</rng:define>-->
+	<rng:define name="PropertyDataTypeDescription">
+		<a:documentation>
+			<sch:pattern xmlns:xs="http://www.w3.org/2001/XMLSchema"
+				name="PropertyDataTypeDescription">
+				<sch:rule context="element(*, PropertyDataTypeDescription)">
+					<sch:assert test="PropertyDataType = 'stochastic' and count(*) = 1">A
+						PropertyDataTypeDescription element whose PropertyDataType = 'stochastic'
+						may not have any other children.</sch:assert>
+					<sch:assert
+						test="SimpleValueDataType and PropertyDataType = 'simple' and count(*) = 2">
+						A PropertyDataTypeDescription element whose PropertyDataType = 'simple'
+						must have the SimpleValueDataType child element and not other.</sch:assert>
+					<sch:assert
+						test="ReferenceType and PropertyDataType = 'simple' and count(*) = 2">
+						A PropertyDataTypeDescription element whose PropertyDataType = 'reference'
+						must have the ReferenceType child element and not other.</sch:assert>
+				</sch:rule>
+			</sch:pattern>
+		</a:documentation>
+		<rng:interleave>
+			<rng:element name="PropertyDataType">
+				<rng:ref name="PropertyType"/>
+			</rng:element>
+			<rng:optional>
+				<rng:element name="ReferenceType">
+					<rng:ref name="ReferenceTypeName"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="SimpleValueDataType">
+					<rng:ref name="SimpleDataTypeName"/>
+				</rng:element>
+			</rng:optional>
+		</rng:interleave>
+	</rng:define>
+	<!--<rng:start>
+		<rng:ref name="PropertyCardinality"/>
+	</rng:start>
+	<rng:define name="PropertyCardinality">
+		<rng:element name="PropertyCardinality">
+			<rng:ref name="PropertyCardinality"/>
+		</rng:element>
+	</rng:define>-->
+	<rng:define name="PropertyCardinality">
+		<a:documentation>
+			<sch:pattern xmlns:xs="http://www.w3.org/2001/XMLSchema"
+				name="PropertyCardinality">
+				<sch:rule context="element(*, PropertyCardinality)">
+					<sch:assert test="count(*) &gt; 0">A PropertyCardinality element may not be
+						empty</sch:assert>
+				</sch:rule>
+			</sch:pattern>
+		</a:documentation>
+		<rng:interleave>
+			<rng:optional>
+				<rng:element name="Minimum">
+					<rng:ref name="NonNegativeInteger"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="Maximum">
+					<rng:ref name="CardinalitySpecification"/>
+				</rng:element>
+			</rng:optional>
+		</rng:interleave>
+	</rng:define>
+</rng:grammar>

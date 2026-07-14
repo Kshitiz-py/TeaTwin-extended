@@ -1,0 +1,1028 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<rng:grammar xmlns:rng="http://relaxng.org/ns/structure/1.0"
+	xmlns:a="http://relaxng.org/ns/compatibility/annotations/1.0"
+	xmlns:sch="http://www.ascc.net/xml/schematron" 
+	datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes">
+	
+	<!-- *****************************************************************************
+		
+		Basic structures for measured values and their units
+				
+	    *****************************************************************************
+	    -->
+	
+	<rng:define name="AreaType">
+		<rng:optional>
+			<rng:element name="Unit">
+				<rng:ref name="AreaUnit"/>
+			</rng:element>
+		</rng:optional>
+		<rng:element name="Value">
+			<rng:ref name="Decimal"/>
+		</rng:element>
+	</rng:define>
+	
+	
+	<rng:define name="CurrencyType">
+		<rng:optional>
+			<rng:element name="Unit">
+				<rng:ref name="CurrencyUnit"/>
+			</rng:element>
+		</rng:optional>
+		<rng:element name="Value">
+			<rng:ref name="Decimal"/>
+		</rng:element>
+	</rng:define>
+	
+
+	<rng:define name="ElapsedTimeType">
+		<rng:optional>
+			<rng:element name="Unit">
+				<rng:ref name="TimeUnit"/>
+			</rng:element>
+		</rng:optional>
+		<rng:element name="Value">
+			<rng:ref name="Decimal"/>
+		</rng:element>
+	</rng:define>
+	
+	<rng:define name="LengthType">
+		<rng:optional>
+			<rng:element name="Unit">
+				<rng:ref name="LengthUnit"/>
+			</rng:element>
+		</rng:optional>
+		<rng:element name="Value">
+			<rng:ref name="Decimal"/>
+		</rng:element>
+	</rng:define>
+	
+	<rng:define name="PowerType">
+		<rng:optional>
+			<rng:element name="Unit">
+				<rng:ref name="PowerUnit"/>
+			</rng:element>
+		</rng:optional>
+		<rng:element name="Value">
+			<rng:ref name="Decimal"/>
+		</rng:element>
+	</rng:define>
+
+	<rng:define name="SpeedType">
+		<rng:optional>
+			<rng:element name="Unit">
+				<rng:ref name="SpeedUnit"/>
+			</rng:element>
+		</rng:optional>
+		<rng:element name="Value">
+			<rng:ref name="Decimal"/>
+		</rng:element>
+	</rng:define>
+	
+	<rng:define name="TemperatureType">
+		<rng:optional>
+			<rng:element name="Unit">
+				<rng:ref name="TemperatureUnit"/>
+			</rng:element>
+		</rng:optional>
+		<rng:element name="Value">
+			<rng:ref name="Decimal"/>
+		</rng:element>
+	</rng:define>
+	
+	<rng:define name="VolumeType">
+		<rng:optional>
+			<rng:element name="Unit">
+				<rng:ref name="VolumeUnit"/>
+			</rng:element>
+		</rng:optional>
+		<rng:element name="Value">
+			<rng:ref name="Decimal"/>
+		</rng:element>
+	</rng:define>
+	
+	<rng:define name="WeightType">
+		<rng:optional>
+			<rng:element name="Unit">
+				<rng:ref name="WeightUnit"/>
+			</rng:element>
+		</rng:optional>
+		<rng:element name="Value">
+			<rng:ref name="Decimal"/>
+		</rng:element>
+	</rng:define>
+
+	<rng:define name="QuantityType">
+		<rng:interleave>
+			<rng:optional>
+				<rng:element name="UnitDescription">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			
+			<rng:element name="UnitName">
+				<rng:ref name="String"/>
+			</rng:element>
+			<rng:element name="Value">
+				<rng:ref name="Decimal"/>
+			</rng:element>
+		</rng:interleave>
+	</rng:define>
+	
+	
+	<rng:define name="GrossDimensions">
+		<a:documentation>
+			<sch:pattern xmlns:xs="http://www.w3.org/2001/XMLSchema"
+				name="GrossDimensions">
+				<sch:rule context="element(*, GrossDimensions)">
+					<sch:assert test="count(Width) + count(Depth) + count(Height) &gt; 0">At
+						least one of [Width,Depth,Height] must be present</sch:assert>
+				</sch:rule>
+			</sch:pattern>
+		</a:documentation>
+		<rng:interleave>
+			<rng:optional>
+				<rng:element name="Unit">
+					<rng:ref name="LengthUnit"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="Width">
+					<rng:ref name="Decimal"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="Depth">
+					<rng:ref name="Decimal"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="Height">
+					<rng:ref name="Decimal"/>
+				</rng:element>
+			</rng:optional>
+		</rng:interleave>
+	</rng:define>
+	
+	
+		<!-- *****************************************************************************
+		
+		Basic structures for Property attributes
+				
+	    *****************************************************************************
+	    -->
+	
+	<rng:define name="Property">
+		<rng:interleave>
+			<rng:optional>
+				<rng:element name="PropertyDescription">
+					<rng:ref name="PropertyDescriptionReference"/>
+				</rng:element>
+			</rng:optional>
+			<rng:element name="Name">
+				<rng:ref name="String"/>
+			</rng:element>
+			<rng:optional>
+				<rng:element name="Description">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="Unit">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<rng:choice>
+				<rng:element name="Value">
+					<rng:ref name="String"/>
+				</rng:element>
+				<rng:element name="Distribution">
+					<rng:ref name="Distribution"/>
+				</rng:element>
+				<rng:ref name="AbstractEntityReference"/>				
+			</rng:choice>
+		</rng:interleave>
+	</rng:define>
+	
+		<!-- *****************************************************************************
+		
+		Basic structures for Distribution related information
+				
+	    *****************************************************************************
+	    -->	  
+	    
+	<rng:define name="UniqueEntity" combine="choice">
+		<rng:element name="DistributionDefinition">
+			<rng:ref name="DistributionDefinition"/>
+		</rng:element>
+	</rng:define>
+	<rng:define name="DistributionDefinition">
+		<rng:interleave>
+			<rng:ref name="IdentifiableEntityFrontGroup"/>
+			<rng:element name="Distribution">
+				<rng:ref name="Distribution"/>
+			</rng:element>
+			<rng:ref name="IdentifiableEntityBackGroup"/>
+		</rng:interleave>
+	</rng:define>
+
+	<rng:define name="Duration">
+		<rng:optional>
+			<rng:element name="Unit">
+				<rng:ref name="TimeUnit"/>
+			</rng:element>
+		</rng:optional>
+		<rng:choice>
+			<rng:element name="Value">
+				<rng:ref name="Decimal"/>
+			</rng:element>
+			<rng:element name="Distribution">
+				<rng:ref name="Distribution"/>
+			</rng:element>
+			<rng:element name="DistributionReference">
+				<rng:ref name="DistributionDefinitionReference"/>
+			</rng:element>
+		</rng:choice>
+	</rng:define>
+	
+	<rng:define name="Distribution">
+		<rng:interleave>
+			<rng:element name="Name">
+				<rng:ref name="String"/>
+			</rng:element>
+			<rng:optional>
+				<rng:element name="Description">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<rng:oneOrMore>
+				<rng:element name="DistributionParameter">
+					<rng:ref name="DistributionParameter"/>
+				</rng:element>
+			</rng:oneOrMore>
+		</rng:interleave>
+	</rng:define>
+
+	<rng:define name="DistributionParameter">
+		<rng:interleave>
+			<rng:element name="Name">
+				<rng:ref name="String"/>
+			</rng:element>
+			<rng:optional>
+				<rng:element name="Description">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<rng:element name="Value">
+				<rng:ref name="Decimal"/>
+			</rng:element>
+		</rng:interleave>
+	</rng:define>
+	
+	
+	<!-- *****************************************************************************
+		
+		Basic structures for Contact  related information
+				
+	    *****************************************************************************
+	    -->
+
+	<rng:define name="ContactInformation">
+		<a:documentation>
+			<sch:pattern xmlns:xs="http://www.w3.org/2001/XMLSchema"
+				name="ContactInformation">
+				<sch:rule context="element(*, ContactInformation)">
+					<sch:assert test="count(*) &gt; 0">At least one child element must be
+						present</sch:assert>
+				</sch:rule>
+			</sch:pattern>
+		</a:documentation>
+		<rng:interleave>
+			<rng:zeroOrMore>
+				<rng:element name="ContactParty">
+					<rng:ref name="ContactParty"/>
+				</rng:element>
+			</rng:zeroOrMore>
+			<rng:zeroOrMore>
+
+				<rng:ref name="CommunicationMethod"/>
+
+			</rng:zeroOrMore>
+		</rng:interleave>
+	</rng:define>
+	
+	
+	<rng:define name="ContactParty">
+		<a:documentation>
+			<sch:pattern xmlns:xs="http://www.w3.org/2001/XMLSchema" name="ContactParty">
+				<sch:rule context="element(*, ContactParty)">
+					<sch:assert test="count(OrganizationName) + count(PersonName) &gt; 0">At
+						least one of [PersonName,OrganizationName] must be present</sch:assert>
+				</sch:rule>
+			</sch:pattern>
+		</a:documentation>
+		<rng:interleave>
+			<rng:optional>
+				<rng:element name="PersonName">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="OrganizationName">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<rng:zeroOrMore>
+				
+				<rng:ref name="CommunicationMethod"/>
+				
+			</rng:zeroOrMore>
+		</rng:interleave>
+	</rng:define>
+	
+
+	<rng:define name="CommunicationMethod">
+		<rng:choice>
+			<rng:element name="Phone">
+				<rng:ref name="Phone"/>
+			</rng:element>
+			<rng:element name="Address">
+				<rng:ref name="Address"/>
+			</rng:element>
+			<rng:element name="Emain">
+				<rng:ref name="Email"/>
+			</rng:element>
+		</rng:choice>
+	</rng:define>
+	
+	<rng:define name="CommunicationMethodDescriptionElement">
+		<rng:optional>
+			<rng:element name="Description">
+				<rng:ref name="String"/>
+			</rng:element>
+		</rng:optional>
+	</rng:define>
+	
+	
+	<rng:define name="Phone">
+		<rng:interleave>
+			<rng:ref name="CommunicationMethodDescriptionElement"/>
+			<rng:element name="Number">
+				<rng:ref name="String"/>
+			</rng:element>
+		</rng:interleave>
+	</rng:define>
+
+	<rng:define name="Email">
+		<rng:interleave>
+			<rng:ref name="CommunicationMethodDescriptionElement"/>
+			<rng:element name="Address">
+				<rng:ref name="URI"/>
+			</rng:element>
+		</rng:interleave>
+	</rng:define>
+
+	<rng:define name="Address">
+		<rng:interleave>
+			<rng:ref name="CommunicationMethodDescriptionElement"/>
+			<rng:optional>
+				<rng:element name="OrganizationName">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<rng:choice>
+				<rng:element name="Street">
+					<rng:ref name="String"/>
+				</rng:element>
+				<rng:element name="PostOfficeBox">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:choice>
+			<rng:optional>
+				<rng:element name="AdditionalInformation">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<rng:element name="City">
+				<rng:ref name="String"/>
+			</rng:element>
+			<rng:element name="State">
+				<rng:ref name="String"/>
+			</rng:element>
+			<rng:optional>
+				<rng:element name="Country">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="PostalCode">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+		</rng:interleave>
+	</rng:define>
+	
+	
+	<!-- *****************************************************************************
+		
+		Basic structures for Precedence Constraint related information
+				
+	    *****************************************************************************
+	    -->
+	
+	<rng:define name="PrecedenceConstraintSuperClassElements">
+		<rng:interleave>
+			<rng:optional>
+				<rng:element name="Description">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<rng:element name="PrecedenceRelationship">
+				<rng:ref name="PrecedenceRelationship"/>
+			</rng:element>
+			<rng:optional>
+				<rng:element name="LagDuration">
+					<rng:ref name="ElapsedTimeType"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="LagPercentage">
+					<rng:ref name="Decimal"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="LagPartsComplete">
+					<rng:ref name="NonNegativeInteger"/>
+				</rng:element>
+			</rng:optional>
+		</rng:interleave>
+	</rng:define>
+	
+
+	<rng:define name="ProcessConstraint">
+		<rng:interleave>
+			<rng:ref name="PrecedenceConstraintSuperClassElements"/>
+			<rng:element name="PredecessorProcess">
+				<rng:ref name="ProcessReference"/>
+			</rng:element>
+			<rng:element name="SuccessorProcess">
+				<rng:ref name="ProcessReference"/>
+			</rng:element>
+		</rng:interleave>
+	</rng:define>
+
+	<rng:define name="JobConstraint">
+		<rng:interleave>
+			<rng:ref name="PrecedenceConstraintSuperClassElements"/>
+			<rng:element name="PredecessorJob">
+				<rng:ref name="JobReference"/>
+			</rng:element>
+			<rng:element name="SuccessorJob">
+				<rng:ref name="JobReference"/>
+			</rng:element>
+		</rng:interleave>
+	</rng:define>
+
+	<rng:define name="MaintenanceProcessConstraint">
+		<rng:interleave>
+			<rng:ref name="PrecedenceConstraintSuperClassElements"/>
+			<rng:element name="PredecessorProcess">
+				<rng:ref name="MaintenanceProcessReference"/>
+			</rng:element>
+			<rng:element name="SuccessorProcess">
+				<rng:ref name="MaintenanceProcessReference"/>
+			</rng:element>
+		</rng:interleave>
+	</rng:define>
+	
+	<!-- *****************************************************************************
+		
+		Basic structures that support Order, Job, and Process definition
+				
+	    *****************************************************************************
+	    -->
+	
+	<rng:define name="ItemPackaging">
+		<rng:interleave>
+			<rng:element name="PackageName">
+				<rng:ref name="String"/>
+			</rng:element>
+			<rng:optional>
+				<rng:element name="PackageDescription">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:choice>
+					<rng:element name="PerMeasuredAmountPackaging">
+						<rng:ref name="PerMeasuredAmountPackaging"/>
+					</rng:element>
+					<rng:element name="PerPiecePackaging">
+						<rng:ref name="PerPiecePackaging"/>
+					</rng:element>
+				</rng:choice>
+			</rng:optional>			
+		</rng:interleave>
+	</rng:define>
+
+	<rng:define name="PerPiecePackaging">
+		<rng:element name="PiecesPerPackage">
+			<rng:ref name="NonNegativeInteger"/>
+		</rng:element>
+		<rng:optional>
+			<rng:element name="PricePerPiece">
+				<rng:ref name="CurrencyType"/>
+			</rng:element>
+		</rng:optional>
+	</rng:define>
+	
+	<rng:define name="PerMeasuredAmountPackaging">
+		<rng:interleave>
+			<rng:element name="MeasuredAmount">
+				<rng:ref name="Decimal"/>
+			</rng:element>
+			<rng:optional>
+				<rng:element name="PackageUnitOfMeasure">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="PricePerUnit">
+					<rng:ref name="CurrencyType"/>
+				</rng:element>
+			</rng:optional>
+		</rng:interleave>
+	</rng:define>
+	
+	<rng:define name="CostAllocationData">
+		<a:documentation>
+			<sch:pattern xmlns:xs="http://www.w3.org/2001/XMLSchema"
+				name="CostAllocationData">
+				<sch:rule context="element(*, CostAllocationData)">
+					<sch:assert
+						test="(CostType = 'variable' and count(VariableCostData) = 1) or count(VariableCostData) = 0">
+						If VariableCostData is present, NumberWord must be 'two'</sch:assert>
+				</sch:rule>
+			</sch:pattern>
+		</a:documentation>
+		<rng:interleave>
+			<rng:optional>
+				<rng:element name="CostCategory">
+					<rng:ref name="CostCategory"/>
+				</rng:element>
+			</rng:optional>
+			<rng:element name="CostType">
+				<rng:ref name="CostType"/>
+			</rng:element>
+			<rng:optional>
+				<rng:element name="CostName">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="CostDescription">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<rng:element name="TotalCost">
+				<rng:ref name="CurrencyType"/>
+			</rng:element>
+			<rng:zeroOrMore>
+				<rng:element name="Property">
+					<rng:ref name="Property"/>
+				</rng:element>
+			</rng:zeroOrMore>
+			<rng:optional>
+				<rng:element name="VariableCostData">
+					<rng:ref name="VariableCostData"/>
+				</rng:element>
+			</rng:optional>
+		</rng:interleave>
+	</rng:define>
+
+	<rng:define name="VariableCostData">
+		<rng:interleave>
+			<rng:element name="CostUnit">
+				<rng:ref name="String"/>
+			</rng:element>
+			<rng:element name="CostRatePerUnit">
+				<rng:ref name="Decimal"/>
+			</rng:element>
+			<rng:element name="CostUnitQuantity">
+				<rng:ref name="Decimal"/>
+			</rng:element>
+		</rng:interleave>
+	</rng:define>
+	
+	<rng:define name="MachineProgramData">
+		<a:documentation>
+			<sch:pattern xmlns:xs="http://www.w3.org/2001/XMLSchema"
+				name="MachineProgramData">
+				<sch:rule context="element(*, MachineProgramData)">
+					<sch:assert test="count(*) &gt; 0">At least one child element must be
+						present</sch:assert>
+				</sch:rule>
+			</sch:pattern>
+		</a:documentation>
+		<rng:interleave>
+			<rng:optional>
+				<rng:element name="MachineProgramName">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<rng:zeroOrMore>
+				<rng:element name="TargetMachine">
+					<rng:ref name="ResourceReference"/>
+				</rng:element>
+			</rng:zeroOrMore>
+			<rng:optional>
+				<rng:element name="MachineProgramLocation">
+					<rng:ref name="URI"/>
+				</rng:element>
+			</rng:optional>
+		</rng:interleave>
+	</rng:define>
+	
+	<rng:define name="Event">
+		<a:documentation>
+			<sch:pattern xmlns:xs="http://www.w3.org/2001/XMLSchema" name="Event">
+				<sch:rule context="element(*, Event)">
+					<sch:assert test="count(*) &gt; 0">At least one child element must be
+						present</sch:assert>
+				</sch:rule>
+			</sch:pattern>
+		</a:documentation>
+		<rng:interleave>
+			<rng:optional>
+				<rng:element name="SequenceNumber">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="Name">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="Description">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="Timestamp">
+					<rng:ref name="Timestamp"/>
+				</rng:element>
+			</rng:optional>
+			<rng:zeroOrMore>
+				<rng:element name="Property">
+					<rng:ref name="Property"/>
+				</rng:element>
+			</rng:zeroOrMore>
+		</rng:interleave>
+	</rng:define>
+	
+	<!-- *****************************************************************************
+		
+		Basic structures that support Layout information definition
+				
+	    *****************************************************************************
+	    -->
+	
+	<rng:define name="SpatialDimension">
+		<rng:interleave>
+			<rng:element name="Width">
+				<rng:ref name="Decimal"/>
+			</rng:element>
+			<rng:element name="Depth">
+				<rng:ref name="Decimal"/>
+			</rng:element>
+			<rng:optional>
+				<rng:element name="Height">
+					<rng:ref name="Decimal"/>
+				</rng:element>
+			</rng:optional>
+		</rng:interleave>		
+	</rng:define>
+	
+	
+	<rng:define name="BoundaryDefinition">
+		<rng:interleave>
+			<rng:ref name="SpatialDimension"/>
+			<rng:optional>
+				<rng:element name="Unit">
+					<rng:ref name="LayoutLengthUnit"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="CoordinateSystem">
+					<rng:ref name="CoordinateSystem"/>
+				</rng:element>
+			</rng:optional>
+		</rng:interleave>
+	</rng:define>
+
+	<rng:define name="Coordinate2D">
+		<rng:element name="X">
+			<rng:ref name="Decimal"/>
+		</rng:element>
+		<rng:element name="Y">
+			<rng:ref name="Decimal"/>
+		</rng:element>
+	</rng:define>
+	
+	<rng:define name="Coordinate3D">
+		<rng:ref name="Coordinate2D"/>
+		<rng:optional>
+			<rng:element name="Z">
+				<rng:ref name="Decimal"/>
+			</rng:element>
+		</rng:optional>
+	</rng:define>
+	
+	<rng:define name="ColorHighlight">
+		<a:documentation>
+			<sch:pattern xmlns:xs="http://www.w3.org/2001/XMLSchema"
+				name="ColorHighlight">
+				<sch:rule context="element(*, ColorHighlight)">
+					<sch:assert
+						test="count(LineColor) + count(FillColor) + count(AlphaValue) &gt; 0">
+						At least one of [LineColor,FillColor,AlphaValue] must be present</sch:assert>
+				</sch:rule>
+			</sch:pattern>
+		</a:documentation>
+		<rng:interleave>
+			<rng:optional>
+				<rng:element name="LineColor">
+					<rng:ref name="ColorDefinition"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="FillColor">
+					<rng:ref name="ColorDefinition"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="AlphaValue">
+					<rng:ref name="NonNegativeInteger"/>
+				</rng:element>
+			</rng:optional>
+			<rng:zeroOrMore>
+				<rng:element name="Property">
+					<rng:ref name="Property"/>
+				</rng:element>
+			</rng:zeroOrMore>
+		</rng:interleave>
+	</rng:define>
+
+	<rng:define name="ShapeLabelDefinition">
+		<rng:interleave>
+			<rng:element name="Text">
+				<rng:ref name="String"/>
+			</rng:element>
+			<rng:optional>
+				<rng:element name="Color">
+					<rng:ref name="ColorDefinition"/>
+				</rng:element>
+			</rng:optional>
+			<rng:zeroOrMore>
+				<rng:element name="Property">
+					<rng:ref name="Property"/>
+				</rng:element>
+			</rng:zeroOrMore>
+		</rng:interleave>
+	</rng:define>
+
+	<rng:define name="ImageResolution">
+		<rng:interleave>
+			<rng:element name="PixelsPerUnit">
+				<rng:ref name="NonNegativeInteger"/>
+			</rng:element>
+			<rng:element name="ScreenUnit">
+				<rng:ref name="LayoutLengthUnit"/>
+			</rng:element>
+		</rng:interleave>
+	</rng:define>
+	
+	
+	<!-- *****************************************************************************
+		
+		Basic structures that support ReferenceMaterial definition
+				
+	    *****************************************************************************
+	    -->
+	    
+	<rng:define name="UniqueEntity" combine="choice">
+		<rng:element name="ReferenceMaterial">
+			<rng:ref name="ReferenceMaterial"/>
+		</rng:element>
+	</rng:define>
+	    
+	<rng:define name="ReferenceMaterial">
+		<rng:interleave>
+			<rng:ref name="IdentifiableEntityFrontGroup"/>
+			<rng:optional>
+				<rng:element name="FileName">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="OnlineLocation">
+					<rng:ref name="URI"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="ISBN">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="DigitalFormat">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="PermanentStorageMedium">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="PhysicalLocation">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="RequiredApplication">
+					<rng:ref name="RequiredApplication"/>
+				</rng:element>
+			</rng:optional>
+			<rng:ref name="IdentifiableEntityBackGroup"/>
+		</rng:interleave>
+	</rng:define>
+		
+	<rng:define name="RequiredApplication">
+		<rng:interleave>
+			<rng:element name="Name">
+				<rng:ref name="String"/>
+			</rng:element>
+			<rng:optional>
+				<rng:element name="Description">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="Version">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="OperatingSystem">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+		</rng:interleave>
+	</rng:define>
+	
+	<!-- *****************************************************************************
+		
+		Other Basic structures 
+				
+	    *****************************************************************************
+	    -->
+
+	<rng:define name="PartGroup">
+		<a:documentation>
+			<sch:pattern xmlns:xs="http://www.w3.org/2001/XMLSchema" name="PartGroup">
+				<sch:rule context="element(*, PartGroup)">
+					<sch:assert test="count(PartQuantity) + count(PartInstance) &gt; 0">At least
+						one of [PartQuantity,PartInstance] must be present</sch:assert>
+					<sch:assert
+						test="(count(PartQuantity) and count(PartType) = 1) or count(PartQuantity) = 0">
+						If PartQuantity is present, PartType must also be present</sch:assert>
+				</sch:rule>
+			</sch:pattern>
+		</a:documentation>
+		<rng:interleave>
+			<rng:optional>
+				<rng:element name="Description">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="PartType">
+					<rng:ref name="PartTypeReference"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="PartQuantity">
+					<rng:ref name="NonNegativeInteger"/>
+				</rng:element>
+			</rng:optional>
+			<rng:zeroOrMore>
+				<rng:element name="PartInstance">
+					<rng:ref name="PartReference"/>
+				</rng:element>
+			</rng:zeroOrMore>
+		</rng:interleave>
+	</rng:define>
+	
+	<rng:define name="LotInformation">
+		<rng:interleave>
+			<rng:element name="LotNumber">
+				<rng:ref name="String"/>
+			</rng:element>
+			<rng:optional>
+				<rng:element name="ParentLotNumber">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="Description">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+		</rng:interleave>
+	</rng:define>
+
+	<rng:define name="LocationDefinition">
+		<a:documentation>
+			<sch:pattern xmlns:xs="http://www.w3.org/2001/XMLSchema"
+				name="LocationDefinition">
+				<sch:rule context="element(*, LocationDefinition)">
+					<sch:assert test="count(*) &gt; 0">At least one child element must be
+						present</sch:assert>
+				</sch:rule>
+			</sch:pattern>
+		</a:documentation>
+		<rng:interleave>
+			<rng:optional>
+				<rng:element name="FacilityLocation">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="WithinFacilityLocation">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="ResourceLocation">
+					<rng:ref name="ResourceReference"/>
+				</rng:element>
+			</rng:optional>
+		</rng:interleave>
+	</rng:define>
+	
+
+	<rng:define name="ResourcesRequired">
+		<a:documentation>
+			<sch:pattern xmlns:xs="http://www.w3.org/2001/XMLSchema"
+				name="ResourcesRequired">
+				<sch:rule context="element(*, ResourcesRequired)">
+					<sch:assert test="count(*) &gt; 0">At least one child element must be
+						present</sch:assert>
+				</sch:rule>
+			</sch:pattern>
+		</a:documentation>
+		<rng:interleave>
+			<rng:optional>
+				<rng:element name="Description">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="ResourceClass">
+					<rng:ref name="ResourceClassReference"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="MinimumNumber">
+					<rng:ref name="NonNegativeInteger"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="MaximumNumber">
+					<rng:ref name="NonNegativeInteger"/>
+				</rng:element>
+			</rng:optional>
+			<rng:zeroOrMore>
+				<rng:element name="Resource">
+					<rng:ref name="ResourceReference"/>
+				</rng:element>
+			</rng:zeroOrMore>
+			<rng:zeroOrMore>
+				<rng:element name="AllowableSetup">
+					<rng:ref name="SetupDefinitionReference"/>
+				</rng:element>
+			</rng:zeroOrMore>
+			<rng:zeroOrMore>
+				<rng:element name="RequiredEmployeeSkill">
+					<rng:ref name="SkillReference"/>
+				</rng:element>
+			</rng:zeroOrMore>
+		</rng:interleave>
+	</rng:define>
+	
+	
+	
+</rng:grammar>

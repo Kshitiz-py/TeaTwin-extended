@@ -1,0 +1,73 @@
+<mxfile host="app.diagrams.net">
+  <diagram name="Figure 3: DAG" id="dag_diagram">
+    <mxGraphModel dx="1000" dy="600" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="title" value="Figure 3: Entity Dependency DAG &amp; Topological Build Order" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=18;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="150" y="40" width="500" height="40" as="geometry" />
+        </mxCell>
+
+        <mxCell id="n_rc" value="ResourceClasses" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="100" y="120" width="140" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="n_pt" value="PartTypes" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="100" y="260" width="140" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="n_r" value="Resources" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="320" y="120" width="140" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="n_o" value="Orders" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="320" y="260" width="140" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="n_j" value="Jobs" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="540" y="190" width="140" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e1" edge="1" parent="1" source="n_rc" target="n_r" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;endArrow=classic;strokeColor=#333333;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e2" edge="1" parent="1" source="n_pt" target="n_o" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;endArrow=classic;strokeColor=#333333;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e3" edge="1" parent="1" source="n_r" target="n_j" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;endArrow=classic;strokeColor=#333333;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+               <mxPoint x="490" y="150" />
+               <mxPoint x="490" y="205" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="e4" edge="1" parent="1" source="n_o" target="n_j" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;endArrow=classic;strokeColor=#333333;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+               <mxPoint x="490" y="290" />
+               <mxPoint x="490" y="235" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="arr_build" edge="1" parent="1" style="edgeStyle=none;html=1;strokeWidth=3;endArrow=classic;strokeColor=#999999;dashed=1;">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="100" y="380" as="source"/>
+            <mxPoint x="680" y="380" as="target"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="lbl_build" value="Topological Build Order (DAG Resolution)" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=14;fontStyle=2;fontColor=#666666;" vertex="1" connectable="0" parent="arr_build">
+          <mxGeometry x="0" y="20" relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

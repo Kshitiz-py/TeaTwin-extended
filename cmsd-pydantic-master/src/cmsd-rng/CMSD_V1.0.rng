@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<rng:grammar xmlns:rng="http://relaxng.org/ns/structure/1.0"
+	xmlns:a="http://relaxng.org/ns/compatibility/annotations/1.0"
+	datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes">
+	<rng:start>
+		<rng:choice>
+			<rng:externalRef href="Packages.rng"/>
+			
+			<rng:grammar xmlns="urn:cmsd:main" ns="urn:cmsd:main"
+				datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes">
+				
+				<rng:include href="Packages.rng">
+				<rng:start>
+					<rng:element name="CMSDDocument" ns="urn:cmsd:main">
+						<rng:ref name="CMSDDocument"/>
+					</rng:element>
+				</rng:start>
+				
+				</rng:include>
+				
+
+			
+			</rng:grammar>
+			
+	
+		</rng:choice>
+		
+	</rng:start>
+	
+</rng:grammar>

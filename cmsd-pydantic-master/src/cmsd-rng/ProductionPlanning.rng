@@ -1,0 +1,408 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<rng:grammar xmlns:rng="http://relaxng.org/ns/structure/1.0"
+	xmlns:a="http://relaxng.org/ns/compatibility/annotations/1.0"
+	xmlns:sch="http://www.ascc.net/xml/schematron"
+	datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes">
+	
+	
+	
+	<!-- *****************************************************************************
+		
+		Definitions for Calendar related elements
+				
+	    *****************************************************************************
+	    -->
+	
+	<rng:define name="UniqueEntity" combine="choice">
+		<rng:element name="Calendar">
+			<rng:ref name="Calendar"/>
+		</rng:element>
+	</rng:define>
+	
+	<rng:define name="Calendar">
+		<rng:interleave>
+			<rng:ref name="IdentifiableEntityFrontGroup"/>
+			<rng:optional>
+				<rng:element name="EffectiveStartDate">
+					<rng:ref name="Timestamp"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="EffectiveEndDate">
+					<rng:ref name="Timestamp"/>
+				</rng:element>
+			</rng:optional>
+			<rng:zeroOrMore>
+				<rng:element name="Holiday">
+					<rng:ref name="Holiday"/>
+				</rng:element>
+			</rng:zeroOrMore>
+			<rng:zeroOrMore>
+				<rng:element name="Shift">
+					<rng:ref name="Shift"/>
+				</rng:element>
+			</rng:zeroOrMore>
+			<rng:zeroOrMore>
+				<rng:element name="ShiftSchedule">
+					<rng:ref name="ShiftSchedule"/>
+				</rng:element>
+			</rng:zeroOrMore>
+			<rng:ref name="IdentifiableEntityBackGroup"/>
+		</rng:interleave>
+	</rng:define>
+	
+	<rng:define name="Holiday">
+		<rng:interleave>
+			<rng:ref name="IdentifiableEntityFrontGroup"/>
+			<rng:element name="Date">
+				<rng:ref name="Date"/>
+			</rng:element>
+			<rng:ref name="IdentifiableEntityBackGroup"/>
+		</rng:interleave>
+	</rng:define>
+	
+	
+	
+	<rng:define name="Shift">		
+		<a:documentation>
+			<sch:pattern xmlns:xs="http://www.w3.org/2001/XMLSchema"
+				name="Shift">
+				<sch:rule context="element(*, Shift)">
+					<sch:assert test="count(ApplicableDay)  &lt; 8">The should not be more than 7 ApplicableDay elements</sch:assert>
+				</sch:rule>
+			</sch:pattern>
+		</a:documentation>
+		<rng:interleave>
+			<rng:ref name="IdentifiableEntityFrontGroup"/>
+			<rng:element name="StartTime">
+				<rng:ref name="Time"/>
+			</rng:element>
+			<rng:element name="Duration">
+				<rng:ref name="ElapsedTimeType"/>
+			</rng:element>
+			<rng:oneOrMore>
+				<rng:element name="ApplicableDay">
+					<rng:ref name="Day"/>
+				</rng:element>
+			</rng:oneOrMore>
+			<rng:zeroOrMore>
+				<rng:element name="Break">
+					<rng:ref name="Break"/>
+				</rng:element>
+			</rng:zeroOrMore>
+			<rng:ref name="IdentifiableEntityBackGroup"/>
+		</rng:interleave>
+	</rng:define>
+	
+	<rng:define name="Break">
+		<rng:interleave>
+			<rng:optional>
+				<rng:element name="Description">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<rng:element name="StartTime">
+				<rng:ref name="Time"/>
+			</rng:element>
+			<rng:element name="Duration">
+				<rng:ref name="ElapsedTimeType"/>
+			</rng:element>
+		</rng:interleave>
+	</rng:define>
+	
+	
+	<rng:define name="ShiftSchedule">
+		<rng:interleave>
+			<rng:ref name="IdentifiableEntityFrontGroup"/>
+			<rng:optional>
+				<rng:element name="EffectiveStartDate">					 
+						
+					<rng:ref name="Timestamp"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="EffectiveEndDate">
+					<rng:ref name="Timestamp"/>
+				</rng:element>
+			</rng:optional>
+			<rng:oneOrMore>
+				<rng:element name="ApplicableShift">
+					<rng:ref name="CalendarReference"/>
+				</rng:element>
+			</rng:oneOrMore>
+			<rng:zeroOrMore>
+				<rng:element name="ApplicableHoliday">
+					<rng:ref name="CalendarReference"/>
+				</rng:element>
+			</rng:zeroOrMore>
+			<rng:zeroOrMore>
+				<rng:element name="AvailabilityException">
+					<rng:ref name="AvailabilityException"/>
+				</rng:element>
+			</rng:zeroOrMore>
+			<rng:ref name="IdentifiableEntityBackGroup"/>
+		</rng:interleave>
+	</rng:define>
+	
+	<rng:define name="AvailabilityException">
+		<rng:interleave>
+			<rng:element name="ExceptionDate">
+				<rng:ref name="Date"/>
+			</rng:element>
+			<rng:optional>
+				<rng:element name="Description">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+		</rng:interleave>
+	</rng:define>
+	
+	<!-- *****************************************************************************
+		
+		Definitions for ProcessPlan and MaintenencePlan related elements
+				
+	    *****************************************************************************
+	    -->
+	
+	<rng:define name="UniqueEntity" combine="choice">
+		<rng:element name="ProcessPlan">
+			<rng:ref name="ProcessPlan"/>
+		</rng:element>
+	</rng:define>
+	
+	<rng:define name="ProcessPlan">
+		<rng:interleave>
+			<rng:ref name="IdentifiableEntityFrontGroup"/>
+			<rng:oneOrMore>
+				<rng:element name="PartsProduced">
+					<rng:ref name="PartGroup"/>
+				</rng:element>
+			</rng:oneOrMore>
+			<rng:zeroOrMore>
+				<rng:element name="PartsConsumed">
+					<rng:ref name="PartGroup"/>
+				</rng:element>
+			</rng:zeroOrMore>
+			<rng:zeroOrMore>
+				<rng:element name="ResourcesRequired">
+					<rng:ref name="ResourcesRequired"/>
+				</rng:element>
+			</rng:zeroOrMore>
+			<rng:zeroOrMore>
+				<rng:element name="CostAllocationData">
+					<rng:ref name="CostAllocationData"/>
+				</rng:element>
+			</rng:zeroOrMore>
+			<rng:optional>
+				<rng:element name="FirstProcess">
+					<rng:ref name="ProcessReference"/>
+				</rng:element>
+			</rng:optional>
+			<rng:zeroOrMore>
+				<rng:element name="Process">
+					<rng:ref name="Process"/>
+				</rng:element>
+			</rng:zeroOrMore>
+			<rng:ref name="IdentifiableEntityBackGroup"/>
+		</rng:interleave>
+	</rng:define>
+	 
+	<rng:define name="Process">
+		<rng:interleave>
+			<rng:ref name="IdentifiableEntityFrontGroup"/>
+			<rng:zeroOrMore>
+				<rng:element name="PartsProduced">
+					<rng:ref name="PartGroup"/>
+				</rng:element>
+			</rng:zeroOrMore>
+			<rng:zeroOrMore>
+				<rng:element name="PartsConsumed">
+					<rng:ref name="PartGroup"/>
+				</rng:element>
+			</rng:zeroOrMore>
+			<rng:zeroOrMore>
+				<rng:element name="ResourcesRequired">
+					<rng:ref name="ResourcesRequired"/>
+				</rng:element>
+			</rng:zeroOrMore>
+			<rng:optional>
+				<rng:element name="MachineProgramInformation">
+					<rng:ref name="MachineProgramData"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="SetupTime">
+					<rng:ref name="Duration"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="OperationTime">
+					<rng:ref name="Duration"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="RepetitionCount">
+					<rng:ref name="Integer"/>
+				</rng:element>
+			</rng:optional>
+			<rng:zeroOrMore>
+				<rng:element name="CostAllocationData">
+					<rng:ref name="CostAllocationData"/>
+				</rng:element>
+			</rng:zeroOrMore>
+			<rng:optional>
+				<rng:element name="SpecialInstruction">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<rng:zeroOrMore>
+				<rng:element name="ProcessConstraint">
+					<rng:ref name="ProcessConstraint"/>
+				</rng:element>
+			</rng:zeroOrMore>
+			<rng:optional>
+				<rng:element name="SubProcessGroup">
+					<rng:ref name="ProcessGroup"/>
+				</rng:element>
+			</rng:optional>
+			<rng:ref name="IdentifiableEntityBackGroup"/>
+		</rng:interleave>
+	</rng:define>
+	 
+	<rng:define name="ProcessGroup">
+		<rng:interleave>
+			<rng:element name="Type">
+				<rng:ref name="ProcessGroupType"/>
+			</rng:element>
+			<rng:optional>
+				<rng:element name="DecisionText">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<rng:oneOrMore>
+				<rng:element name="Process">
+					<rng:ref name="ProcessReference"/>
+				</rng:element>
+			</rng:oneOrMore>
+			<rng:zeroOrMore>
+				<rng:element name="ProcessConstraint">
+					<rng:ref name="ProcessConstraint"/>
+				</rng:element>
+			</rng:zeroOrMore>
+		</rng:interleave>
+	</rng:define>
+	 
+	<rng:define name="UniqueEntity" combine="choice">
+		<rng:element name="MaintenancePlan">
+			<rng:ref name="MaintenancePlan"/>
+		</rng:element>
+	</rng:define>
+	
+	<rng:define name="MaintenancePlan">
+		<rng:interleave>
+			<rng:ref name="IdentifiableEntityFrontGroup"/>
+			<rng:zeroOrMore>
+				<rng:element name="MaintainedResource">
+					<rng:ref name="ResourceReference"/>
+				</rng:element>
+			</rng:zeroOrMore>
+			<rng:optional>
+				<rng:element name="Periodicity">
+					<rng:ref name="Duration"/>
+				</rng:element>
+			</rng:optional>
+			<rng:zeroOrMore>
+				<rng:element name="CostAllocationData">
+					<rng:ref name="CostAllocationData"/>
+				</rng:element>		
+			</rng:zeroOrMore>
+				
+			<rng:optional>
+				<rng:element name="FirstProcess">
+					<rng:ref name="MaintenanceProcessReference"/>
+				</rng:element>
+			</rng:optional>
+			<rng:zeroOrMore>
+				<rng:element name="MaintenanceProcess">
+					<rng:ref name="MaintenanceProcess"/>
+				</rng:element>
+			</rng:zeroOrMore>
+			<rng:ref name="IdentifiableEntityBackGroup"/>
+		</rng:interleave>
+	</rng:define>
+	
+	<rng:define name="MaintenanceProcess">
+		<rng:interleave>
+			<rng:zeroOrMore>
+				<rng:element name="ResourcesRequired">
+					<rng:ref name="ResourcesRequired"/>
+				</rng:element>
+			</rng:zeroOrMore>
+			<rng:zeroOrMore>
+				<rng:element name="PartsConsumed">
+					<rng:ref name="PartGroup"/>
+				</rng:element>
+			</rng:zeroOrMore>
+			<rng:optional>
+				<rng:element name="SetupTime">
+					<rng:ref name="Duration"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="OperationTime">
+					<rng:ref name="Duration"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="RepetitionCount">
+					<rng:ref name="Integer"/>
+				</rng:element>
+			</rng:optional>
+			<rng:zeroOrMore>
+				<rng:element name="CostAllocationData">
+					<rng:ref name="CostAllocationData"/>
+				</rng:element>
+			</rng:zeroOrMore>
+			<rng:optional>
+				<rng:element name="SpecialInstruction">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<rng:zeroOrMore>
+				<rng:element name="ProcessConstraint">
+					<rng:ref name="MaintenanceProcessConstraint"/>
+				</rng:element>
+			</rng:zeroOrMore>
+			<rng:optional>
+				<rng:element name="SubProcessGroup">
+					<rng:ref name="MaintenanceProcessGroup"/>
+				</rng:element>
+			</rng:optional>
+			<rng:ref name="IdentifiableEntityBackGroup"/>
+		</rng:interleave>
+	</rng:define>
+	 
+	<rng:define name="MaintenanceProcessGroup">
+		<rng:interleave>
+			<rng:element name="Type">
+				<rng:ref name="ProcessGroupType"/>
+			</rng:element>
+			<rng:optional>
+				<rng:element name="DecisionText">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<rng:oneOrMore>
+				<rng:element name="Process">
+					<rng:ref name="MaintenanceProcessReference"/>
+				</rng:element>
+			</rng:oneOrMore>
+			<rng:zeroOrMore>
+				<rng:element name="ProcessConstraint">
+					<rng:ref name="MaintenanceProcessConstraint"/>
+				</rng:element>
+			</rng:zeroOrMore>
+		</rng:interleave>
+	</rng:define>
+</rng:grammar>

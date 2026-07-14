@@ -1,0 +1,287 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<rng:grammar xmlns:rng="http://relaxng.org/ns/structure/1.0"
+	xmlns:a="http://relaxng.org/ns/compatibility/annotations/1.0"
+	xmlns:sch="http://www.ascc.net/xml/schematron"
+	datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes">
+	
+	<!-- *****************************************************************************
+		
+		Definitions for Part and PartType
+				
+	    *****************************************************************************
+	    -->
+	
+	<rng:define name="UniqueEntity" combine="choice">
+		<rng:element name="PartType">
+			<rng:ref name="PartType"/>
+		</rng:element>
+	</rng:define>
+	<rng:define name="PartType">
+		
+		<rng:interleave>
+			<rng:ref name="IdentifiableEntityFrontGroup"/>
+			<rng:optional>
+				<rng:element name="Name">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="BillOfMaterials">
+					<rng:ref name="BillOfMaterialsReference"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="ProcessPlan">
+					<rng:ref name="ProcessPlanReference"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="Size">
+					<rng:ref name="GrossDimensions"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="Weight">
+					<rng:ref name="WeightType"/>
+				</rng:element>
+			</rng:optional>
+			<rng:ref name="IdentifiableEntityBackGroup"/>
+		</rng:interleave>
+	</rng:define>
+	
+	
+	<rng:define name="UniqueEntity" combine="choice">
+		<rng:element name="Part">
+			<rng:ref name="Part"/>
+		</rng:element>
+	</rng:define>
+	<rng:define name="Part">
+		<rng:interleave>
+			
+			<rng:ref name="IdentifiableEntityFrontGroup"/>
+			<rng:optional>
+				<rng:element name="PartType">
+					<rng:ref name="PartTypeReference"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="Name">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="ProductionStatus">
+					<rng:ref name="PartProductionStatus"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="Location">
+					<rng:ref name="LocationDefinition"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="BillOfMaterials">
+					<rng:ref name="BillOfMaterialsReference"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="ProcessPlan">
+					<rng:ref name="ProcessPlanReference"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="LastFinishedProcessStep">
+					<rng:ref name="ProcessReference"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="Size">
+					<rng:ref name="GrossDimensions"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="Weight">
+					<rng:ref name="WeightType"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="Lot">
+					<rng:ref name="LotInformation"/>
+				</rng:element>
+			</rng:optional>
+			<rng:ref name="IdentifiableEntityBackGroup"/>
+		</rng:interleave>
+	</rng:define>
+	
+	<!-- *****************************************************************************
+		
+		Definitions for BillOfMaterials and BillOfMaterialsComponent
+				
+	    *****************************************************************************
+	    -->
+		
+	<rng:define name="UniqueEntity" combine="choice">
+		<rng:element name="BillOfMaterials">
+			<rng:ref name="BillOfMaterials"/>
+		</rng:element>
+	</rng:define>
+	
+	<rng:define name="BillOfMaterials">
+		<rng:interleave>
+			<rng:ref name="IdentifiableEntityFrontGroup"/>
+			<rng:optional>
+				<rng:element name="Name">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="PartType">
+					<rng:ref name="PartTypeReference"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="PartInstance">
+					<rng:ref name="PartReference"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="MainComponent">
+					<rng:ref name="BillOfMaterialsComponentReference"/>
+				</rng:element>
+			</rng:optional>
+			<rng:zeroOrMore>
+				<rng:element name="BillOfMaterialsComponent">
+					<rng:ref name="BillOfMaterialsComponent"/>
+				</rng:element>
+			</rng:zeroOrMore>
+			<rng:ref name="IdentifiableEntityBackGroup"/>
+		</rng:interleave>
+	</rng:define>
+	
+	<rng:define name="BillOfMaterialsComponent">
+		<a:documentation>
+			<sch:pattern xmlns:xs="http://www.w3.org/2001/XMLSchema"
+				name="BillOfMaterialsElement">
+				<sch:rule context="element(*, BillOfMaterialsComponent)">
+					<sch:assert test="count(PartType) + count(SubComponent) &gt; 0">The
+						BillOfMaterialsComponent element must contain at least one of the elements
+						PartType and SubComponent</sch:assert>
+				</sch:rule>
+			</sch:pattern>
+		</a:documentation>
+		<rng:interleave>
+			<rng:ref name="IdentifiableEntityFrontGroup"/>
+			<rng:element name="Quantity">
+				<rng:ref name="Decimal"/>
+			</rng:element>
+			<rng:optional>
+				<rng:element name="PartType">
+					<rng:ref name="PartTypeReference"/>
+				</rng:element>
+			</rng:optional>
+			<rng:zeroOrMore>
+				<rng:element name="PartInstance">
+					<rng:ref name="PartReference"/>
+				</rng:element>
+			</rng:zeroOrMore>
+			<rng:zeroOrMore>
+				<rng:element name="SubComponent">
+					<rng:ref name="BillOfMaterialsComponentReference"/>
+				</rng:element>
+			</rng:zeroOrMore>
+			<rng:ref name="IdentifiableEntityBackGroup"/>
+		</rng:interleave>
+	</rng:define>
+	
+	<!-- *****************************************************************************
+		
+		Definitions for InventoryItem and InventoryItemClass
+				
+	    *****************************************************************************
+	    -->
+		
+	<rng:define name="UniqueEntity" combine="choice">
+		<rng:element name="InventoryItem">
+			<rng:ref name="InventoryItem"/>
+		</rng:element>
+	</rng:define>
+	<rng:define name="InventoryItem">
+		<a:documentation>
+			<sch:pattern xmlns:xs="http://www.w3.org/2001/XMLSchema"
+				name="InventoryItem">
+				<sch:rule context="element(*, InventoryItem)">
+					<sch:assert test="not(AssociatedPart and AssociatedResource)">
+						AssociatedPart and AssociatedResource must not appear together.</sch:assert>
+					<sch:report
+						test="not(QuantityOnHand) and count(AssociatedPart) + count(AssociatedResource) = 0">
+						if QuantityOnHand is not present, either AssociatedPart or
+						AssociatedResource must be present.</sch:report>
+				</sch:rule>
+			</sch:pattern>
+		</a:documentation>
+		<rng:interleave>
+
+			<rng:ref name="IdentifiableEntityFrontGroup"/>
+			<rng:optional>
+				<rng:element name="Name">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<rng:element name="InventoryItemClass">
+				<rng:ref name="InventoryItemClassReference"/>
+			</rng:element>
+			<rng:optional>
+				<rng:element name="QuantityOnHand">
+					<rng:ref name="NonNegativeInteger"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="Location">
+					<rng:ref name="LocationDefinition"/>
+				</rng:element>
+			</rng:optional>
+			<rng:zeroOrMore>
+				<rng:element name="AssociatedPart">
+					<rng:ref name="PartReference"/>
+				</rng:element>
+			</rng:zeroOrMore>
+			<rng:zeroOrMore>
+				<rng:element name="AssociatedResource">
+					<rng:ref name="ResourceReference"/>
+				</rng:element>
+			</rng:zeroOrMore>
+			<rng:ref name="IdentifiableEntityBackGroup"/>
+		</rng:interleave>
+	</rng:define>
+	 
+	<rng:define name="UniqueEntity" combine="choice">
+		<rng:element name="InventoryItemClass">
+			<rng:ref name="InventoryItemClass"/>
+		</rng:element>
+	</rng:define>
+	
+	<rng:define name="InventoryItemClass">
+		
+		<rng:interleave>
+			<rng:ref name="IdentifiableEntityFrontGroup"/>
+			<rng:optional>
+				<rng:element name="Name">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<rng:element name="InventoryItemType">
+				<rng:ref name="InventoryItemType"/>
+			</rng:element>
+			<rng:choice>				
+				<rng:element name="PartType">
+					<rng:ref name="PartTypeReference"/>
+				</rng:element>
+				<rng:element name="ResourceClass">
+					<rng:ref name="ResourceClassReference"/>
+				</rng:element>
+			</rng:choice>
+			<rng:ref name="IdentifiableEntityBackGroup"/>
+		</rng:interleave>
+	</rng:define>
+</rng:grammar>

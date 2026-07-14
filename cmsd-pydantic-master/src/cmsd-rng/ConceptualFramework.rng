@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<rng:grammar xmlns:rng="http://relaxng.org/ns/structure/1.0"
+	xmlns:a="http://relaxng.org/ns/compatibility/annotations/1.0" 
+	datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes" >
+	
+		
+	<!--
+		Schema representations of the Entity, IdentifiableEntity, LimitedUniqueEntity, and
+		ReferencingEntity are not needed to define valid CMSD documents.
+				
+		-->
+	
+	<!--
+		ComplexTypes that extend the IdentifiableEntity complexType will need to include
+		the IdentifiableEntityFrontGroup and IdentifiableEntitybackGroup to model the expected child elements 
+		of the IdentifiableEntity complexType.
+	-->
+	
+
+	
+	<rng:define name="IdentifiableEntityFrontGroup">
+		<rng:interleave>
+			<rng:element name="Identifier">
+				<rng:ref name="Identifier"/>
+			</rng:element>
+			<rng:optional>
+				<rng:element name="Description">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+		</rng:interleave>
+	</rng:define>
+	
+	<rng:define name="IdentifiableEntityBackGroup">
+		<rng:interleave>
+			<rng:zeroOrMore>
+				<rng:element name="ReferenceMaterial">
+					<rng:ref name="ReferenceMaterialReference"/>
+				</rng:element>
+			</rng:zeroOrMore>
+			<rng:zeroOrMore>
+				<rng:element name="Property">
+					<rng:ref name="Property"/>
+				</rng:element>
+			</rng:zeroOrMore>
+		</rng:interleave>
+	</rng:define>
+	
+	
+	<rng:define name="UniqueEntity" combine="choice">
+		<rng:notAllowed></rng:notAllowed>
+
+	</rng:define>
+	
+	
+</rng:grammar>

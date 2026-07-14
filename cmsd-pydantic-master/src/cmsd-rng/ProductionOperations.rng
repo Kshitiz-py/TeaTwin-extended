@@ -1,0 +1,477 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<rng:grammar xmlns:rng="http://relaxng.org/ns/structure/1.0"
+	xmlns:a="http://relaxng.org/ns/compatibility/annotations/1.0"
+	xmlns:sch="http://www.ascc.net/xml/schematron" 
+	datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes">
+	
+	
+	<!-- *****************************************************************************
+		
+		Definitions for Order, Job, and related elements
+				
+	    *****************************************************************************
+	    -->
+	
+	
+	
+	<rng:define name="UniqueEntity" combine="choice">
+		<rng:element name="Job">
+			<rng:ref name="Job"/>
+		</rng:element>
+	</rng:define>
+	
+	<rng:define name="Job">
+		<rng:interleave>
+			<rng:ref name="IdentifiableEntityFrontGroup"/>
+			<rng:element name="Status">
+				<rng:ref name="JobStatus"/>
+			</rng:element>
+			<rng:optional>
+				<rng:element name="UpdateTime">
+					<rng:ref name="Timestamp"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="RequestingParty">
+					<rng:ref name="ContactInformation"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="PerformingParty">
+					<rng:ref name="ContactInformation"/>
+				</rng:element>
+			</rng:optional>
+			<rng:zeroOrMore>
+				<rng:element name="AssociatedOrder">
+					<rng:ref name="OrderInformationReference"/>
+				</rng:element>
+			</rng:zeroOrMore>
+			<rng:optional>
+				<rng:element name="Priority">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<rng:zeroOrMore>
+				<rng:element name="PrecedenceConstraint">
+					<rng:ref name="JobConstraint"/>
+				</rng:element>
+			</rng:zeroOrMore>
+			<rng:zeroOrMore>
+				<rng:element name="SubJob">
+					<rng:ref name="JobReference"/>
+				</rng:element>
+			</rng:zeroOrMore>
+			<rng:optional>
+				<rng:element name="PlannedEffort">
+					<rng:ref name="JobEffortDescription"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="ActualEffort">
+					<rng:ref name="JobEffortDescription"/>
+				</rng:element>
+			</rng:optional>
+			<rng:ref name="IdentifiableEntityBackGroup"/>
+		</rng:interleave>
+	</rng:define>
+	 
+	<rng:define name="JobEffortDescription">
+		<a:documentation>
+			<sch:pattern xmlns:xs="http://www.w3.org/2001/XMLSchema"
+				name="JobEffortDescription">
+				<sch:rule context="element(*, JobEffortDescription)">
+					<sch:assert test="count(*)  &gt; 0">At
+						least one child of JobEffortDescription must be present</sch:assert>
+				</sch:rule>
+			</sch:pattern>
+		</a:documentation>
+		<rng:interleave>
+			<rng:optional>
+				<rng:element name="UpdateTime">
+					<rng:ref name="Timestamp"/>
+				</rng:element>
+			</rng:optional>
+			<rng:zeroOrMore>
+				<rng:element name="PartsProduced">
+					<rng:ref name="PartGroup"/>
+				</rng:element>
+			</rng:zeroOrMore>
+			<rng:zeroOrMore>
+				<rng:element name="PartsConsumed">
+					<rng:ref name="PartGroup"/>
+				</rng:element>
+			</rng:zeroOrMore>
+			<rng:zeroOrMore>
+				<rng:element name="ResourcesRequired">
+					<rng:ref name="ResourcesRequired"/>
+				</rng:element>
+			</rng:zeroOrMore>
+			<rng:optional>
+				<rng:element name="DueDate">
+					<rng:ref name="Timestamp"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="ReleaseDate">
+					<rng:ref name="Timestamp"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="StartTime">
+					<rng:ref name="Timestamp"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="EndTime">
+					<rng:ref name="Timestamp"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="SetupTime">
+					<rng:ref name="Duration"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="ProcessingTime">
+					<rng:ref name="Duration"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="ProcessPlan">
+					<rng:ref name="ProcessPlanReference"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="CurrentProcessPlanStep">
+					<rng:ref name="ProcessReference"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="MaintenancePlan">
+					<rng:ref name="MaintenancePlanReference"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="CurrentMaintenancePlanStep">
+					<rng:ref name="MaintenanceProcessReference"/>
+				</rng:element>
+			</rng:optional>
+			<rng:zeroOrMore>
+				<rng:element name="CostAllocationData">
+					<rng:ref name="CostAllocationData"/>
+				</rng:element>
+			</rng:zeroOrMore>
+			<rng:zeroOrMore>
+				<rng:element name="Note">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:zeroOrMore>
+			<rng:zeroOrMore>
+				<rng:element name="Event">
+					<rng:ref name="Event"/>
+				</rng:element>
+			</rng:zeroOrMore>
+			<rng:zeroOrMore>
+				<rng:element name="Property">
+					<rng:ref name="Property"/>
+				</rng:element>
+			</rng:zeroOrMore>
+		</rng:interleave>
+	</rng:define>
+	
+	<rng:define name="UniqueEntity" combine="choice">
+		<rng:element name="Order">
+			<rng:ref name="Order"/>
+		</rng:element>
+	</rng:define>
+	
+	<rng:define name="Order">
+		<rng:interleave>
+			<rng:ref name="IdentifiableEntityFrontGroup"/>
+			<rng:element name="Status">
+				<rng:ref name="OrderStatus"/>
+			</rng:element>
+			<rng:optional>
+				<rng:element name="UpdateTime">
+					<rng:ref name="Timestamp"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="CustomerParty">
+					<rng:ref name="ContactInformation"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="SupplierParty">
+					<rng:ref name="ContactInformation"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="SpecialInstruction">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="TotalPrice">
+					<rng:ref name="CurrencyType"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="DueDate">
+					<rng:ref name="Date"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="Priority">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<rng:oneOrMore>
+				<rng:element name="OrderLine">
+					<rng:ref name="OrderLine"/>
+				</rng:element>
+			</rng:oneOrMore>
+			<rng:ref name="IdentifiableEntityBackGroup"/>
+		</rng:interleave>
+	</rng:define>
+	
+	<rng:define name="OrderLine">
+		<a:documentation>
+			<!-- This may be redundant with the existing element definition-->
+			<sch:pattern xmlns:xs="http://www.w3.org/2001/XMLSchema" name="OrderLine">
+				<sch:rule context="element(*, OrderLine)">
+					<sch:assert test="not(ServiceDescription and PartDescription)">
+						ServiceDescription and PartDescription must not appear together.</sch:assert>
+				</sch:rule>
+			</sch:pattern>
+		</a:documentation>
+
+		<rng:interleave>
+			<rng:ref name="IdentifiableEntityFrontGroup"/>
+			<rng:optional>
+				<rng:element name="UpdateTime">
+					<rng:ref name="Timestamp"/>
+				</rng:element>
+			</rng:optional>
+			<rng:element name="Status">
+				<rng:ref name="OrderStatus"/>
+			</rng:element>
+			<rng:element name="ItemDescription">
+				<rng:ref name="String"/>
+			</rng:element>
+			<rng:element name="ItemQuantity">
+				<rng:ref name="Decimal"/>
+			</rng:element>
+			<rng:optional>
+				<rng:element name="ItemPrice">
+					<rng:ref name="CurrencyType"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="Priority">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:choice>
+					<rng:element name="ServiceDescription">
+						<rng:ref name="OrderLineServiceDescription"/>
+					</rng:element>
+					<rng:element name="PartDescription">
+						<rng:ref name="OrderLinePartDescription"/>
+					</rng:element>
+				</rng:choice>
+			</rng:optional>
+			<rng:ref name="IdentifiableEntityBackGroup"/>
+		</rng:interleave>
+	</rng:define>
+	
+	<rng:define name="OrderLineServiceDescription">
+		<a:documentation>
+			<sch:pattern xmlns:xs="http://www.w3.org/2001/XMLSchema"
+				name="OrderLineServiceDescription">
+				<sch:rule context="element(*, OrderLineServiceDescription)">
+					<sch:assert test="count(*) &gt; 0">The OrderLineServiceDescription element
+						may not be empty</sch:assert>
+				</sch:rule>
+			</sch:pattern>
+		</a:documentation>
+		<rng:interleave>
+			<rng:optional>
+				<rng:element name="ServiceIdentifier">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="ServiceDetails">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+		</rng:interleave>
+	</rng:define>
+	
+	<rng:define name="OrderLinePartDescription">
+		<a:documentation>
+			<sch:pattern xmlns:xs="http://www.w3.org/2001/XMLSchema"
+				name="OrderLinePartDescription">
+				<sch:rule context="element(*, OrderLinePartDescription)">
+					<sch:assert test="count(*) &gt; 0">The OrderLinePartDescription element may
+						not be empty</sch:assert>
+				</sch:rule>
+			</sch:pattern>
+		</a:documentation>
+		<rng:interleave>
+			<rng:optional>
+				<rng:element name="PartType">
+					<rng:ref name="PartTypeReference"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="Packaging">
+					<rng:ref name="ItemPackaging"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="PartDetails">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+		</rng:interleave>
+	</rng:define>
+	
+	<!-- *****************************************************************************
+		
+		Definitions for Schedule related elements
+				
+	    *****************************************************************************
+	    -->	
+	
+	<rng:define name="UniqueEntity" combine="choice">
+		<rng:element name="Schedule">
+			<rng:ref name="Schedule"/>
+		</rng:element>
+	</rng:define>
+	
+	<rng:define name="Schedule">
+		<rng:interleave>
+			<rng:ref name="IdentifiableEntityFrontGroup"/>
+			<rng:optional>
+				<rng:element name="CreationTime">
+					<rng:ref name="Timestamp"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="StartTime">
+					<rng:ref name="Timestamp"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="EndTime">
+					<rng:ref name="Timestamp"/>
+				</rng:element>
+			</rng:optional>
+			<rng:zeroOrMore>
+				<rng:element name="ScheduleItem">
+					<rng:ref name="ScheduleItem"/>
+				</rng:element>
+			</rng:zeroOrMore>
+			<rng:ref name="IdentifiableEntityBackGroup"/>
+		</rng:interleave>
+	</rng:define>
+	 
+	<rng:define name="ScheduleItem">
+			<a:documentation>
+			<sch:pattern xmlns:xs="http://www.w3.org/2001/XMLSchema"
+				name="ScheduleItem">
+				<sch:rule context="element(*, ScheduleItem)">
+					<sch:assert test="count(PlannedEffort) +count(ActualEffort) &gt; 0">At least one of the elements
+						PlannedEffort and ActualEffort must be present</sch:assert>
+				</sch:rule>
+			</sch:pattern>
+		</a:documentation>
+		<rng:interleave>
+			<rng:ref name="IdentifiableEntityFrontGroup"/>
+			<rng:element name="Status">
+				<rng:ref name="JobStatus"/>
+			</rng:element>
+			<rng:optional>
+				<rng:choice>
+					<rng:element name="AssociatedJob">
+						<rng:ref name="JobReference"/>
+					</rng:element>
+					<rng:element name="AssociatedOrderInformation">
+						<rng:ref name="OrderInformationReference"/>
+					</rng:element>
+					<rng:element name="AssociatedProcess">
+						<rng:ref name="ProcessReference"/>
+					</rng:element>
+					<rng:element name="AssociatedProcessPlan">
+						<rng:ref name="ProcessPlanReference"/>
+					</rng:element>
+					<rng:element name="AssociatedMaintenancePlan">
+						<rng:ref name="MaintenancePlanReference"/>
+					</rng:element>
+					<rng:element name="AssociatedMaintenanceProcess">
+						<rng:ref name="MaintenanceProcessReference"/>
+					</rng:element>
+				</rng:choice>
+			</rng:optional>						
+			<rng:optional>
+				<rng:element name="PlannedEffort">
+					<rng:ref name="ScheduleItemEffortDescription"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="ActualEffort">
+					<rng:ref name="ScheduleItemEffortDescription"/>
+				</rng:element>
+			</rng:optional>
+			<rng:ref name="IdentifiableEntityBackGroup"/>
+		</rng:interleave>
+	</rng:define>
+	 
+	<rng:define name="ScheduleItemEffortDescription">
+		<rng:interleave>
+			<rng:optional>
+				<rng:element name="UpdateTime">
+					<rng:ref name="Timestamp"/>
+				</rng:element>
+			</rng:optional>
+			<rng:element name="StartTime">
+				<rng:ref name="Timestamp"/>
+			</rng:element>
+			<rng:optional>
+				<rng:element name="EndTime">
+					<rng:ref name="Timestamp"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="ProcessingTime">
+					<rng:ref name="Duration"/>
+				</rng:element>
+			</rng:optional>
+			<rng:zeroOrMore>
+				<rng:element name="ResourcesUsed">
+					<rng:ref name="ResourcesRequired"/>
+				</rng:element>
+			</rng:zeroOrMore>
+			<rng:zeroOrMore>
+				<rng:element name="PartsUsed">
+					<rng:ref name="PartGroup"/>
+				</rng:element>
+			</rng:zeroOrMore>
+			<rng:zeroOrMore>
+				<rng:element name="PartsProduced">
+					<rng:ref name="PartGroup"/>
+				</rng:element>
+			</rng:zeroOrMore>
+			<rng:zeroOrMore>
+				<rng:element name="Property">
+					<rng:ref name="Property"/>
+				</rng:element>
+			</rng:zeroOrMore>
+		</rng:interleave>
+	</rng:define>
+	
+</rng:grammar>

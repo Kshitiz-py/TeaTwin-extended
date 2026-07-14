@@ -1,0 +1,207 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<rng:grammar xmlns:rng="http://relaxng.org/ns/structure/1.0"
+	xmlns:a="http://relaxng.org/ns/compatibility/annotations/1.0"
+	xmlns:sch="http://www.ascc.net/xml/schematron" 
+	datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes">
+	
+
+	
+	<rng:define name="CMSDDocument">		
+		<a:documentation>
+			<sch:pattern xmlns:xs="http://www.w3.org/2001/XMLSchema" name="CMSDDocument">
+				<sch:rule context="element(*, CMSDDocument)">
+					<sch:assert test="count(*) &gt; 0">A CMSDDocument element may not be empty</sch:assert>
+				</sch:rule>
+			</sch:pattern>
+		</a:documentation>
+		<!-- Ignore schema instance (or any other) attributes if present on the root element-->
+		<rng:zeroOrMore>
+			<rng:attribute>
+				<rng:anyName/>
+			</rng:attribute>
+		</rng:zeroOrMore>
+		<rng:interleave>		
+			<rng:optional>
+				<rng:element name="HeaderSection" >				
+					<rng:ref name="HeaderSection"/>			
+				</rng:element>			
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="DataSection">
+					<rng:ref name="DataSection"/>
+				</rng:element>
+			</rng:optional>
+		</rng:interleave>
+	</rng:define>
+	
+	
+	<rng:define name="HeaderSection">
+		<a:documentation>
+			<sch:pattern xmlns:xs="http://www.w3.org/2001/XMLSchema"
+				name="HeaderSection">
+				<sch:rule context="element(*, HeaderSection)">
+					<sch:assert test="count(*) &gt; 0">The HeaderSection element may not be
+						empty</sch:assert>
+				</sch:rule>
+			</sch:pattern>
+		</a:documentation>
+		
+		<rng:interleave>
+			<rng:optional>
+				<rng:element name="DocumentIdentifier" >
+					<rng:ref name="Identifier"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="Description">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="Version">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="CreationTime">
+					<rng:ref name="Timestamp"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="Metadata">
+					<rng:ref name="Metadata"/>
+				</rng:element>
+			</rng:optional>
+			<rng:zeroOrMore>
+				<rng:element name="CMSDDocumentReference">
+					<rng:ref name="CMSDDocumentReference"/>
+				</rng:element>
+			</rng:zeroOrMore>
+			<rng:optional>
+				<rng:element name="UnitDefaults">
+					<rng:ref name="UnitDefaults"/>
+				</rng:element>
+			</rng:optional>
+			<!--  Reference material should be in the DataSection
+				-->
+			<!--<rng:zeroOrMore>
+				<rng:element name="ReferenceMaterial">
+					<rng:ref name="ReferenceMaterial"/>
+				</rng:element>
+			</rng:zeroOrMore>		-->	
+		</rng:interleave>
+		
+	
+	</rng:define>
+	
+	<rng:define name="DataSection">
+		<a:documentation>
+			<sch:pattern xmlns:xs="http://www.w3.org/2001/XMLSchema" name="DataSection">
+				<sch:rule context="element(*, DataSection)/*">
+					<assert
+						test="count(//Identifier[. = current()//Identifier and name(..) = name(current()) ] ) = 1">
+					 The identifier for  ' 
+					<name path="self::*"/> 
+					' is  not unique! </assert>
+				</sch:rule>
+			</sch:pattern>
+		</a:documentation>
+		<rng:oneOrMore>
+			<rng:ref name="UniqueEntity"/>
+		</rng:oneOrMore>
+	</rng:define>
+		
+	<rng:define name="Metadata">
+		<rng:oneOrMore>
+			<rng:element name="PropertyDescription">
+				<rng:ref name="PropertyDescription"/>
+			</rng:element>
+		</rng:oneOrMore>
+	</rng:define>
+	
+	<rng:define name="CMSDDocumentReference" >
+			<rng:interleave>
+			<rng:element name="LocalDocumentIdentifier">
+				<rng:ref name="Identifier"/>
+			</rng:element>
+			<rng:element name="DocumentLocation">
+				<rng:ref name="URI"/>
+			</rng:element>
+			<rng:optional>
+				<rng:element name="Description">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+		</rng:interleave>
+		
+	</rng:define>
+	
+	<rng:define name="UnitDefaults">
+		<rng:interleave>
+			<a:documentation>
+				<sch:pattern xmlns:xs="http://www.w3.org/2001/XMLSchema"
+					name="UnitDefaults">
+					<sch:rule context="element(*, UnitDefaults)">
+						<sch:assert test="count(*) &gt; 0">The UnitDefaults element may not be
+							empty</sch:assert>
+					</sch:rule>
+				</sch:pattern>
+			</a:documentation>
+			<a:documentation>default value is : squareFoot</a:documentation>
+			<rng:optional>
+				<rng:element name="AreaUnit">
+					<rng:ref name="AreaUnit"/>
+				</rng:element>
+			</rng:optional>
+			<a:documentation>default value is : foot</a:documentation>
+			<rng:optional>
+				<rng:element name="LengthUnit">
+					<rng:ref name="LengthUnit"/>
+				</rng:element>
+			</rng:optional>
+			<a:documentation>default value is : USD</a:documentation>
+			<rng:optional>
+				<rng:element name="CurrencyUnit">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<a:documentation>default value is : horsepower</a:documentation>
+			<rng:optional>
+				<rng:element name="PowerUnit">
+					<rng:ref name="PowerUnit"/>
+				</rng:element>
+			</rng:optional>
+			<a:documentation>default value is : footPerSecond</a:documentation>
+			<rng:optional>
+				<rng:element name="SpeedUnit">
+					<rng:ref name="SpeedUnit"/>
+				</rng:element>
+			</rng:optional>
+			<a:documentation>default value is : Fahrenheit</a:documentation>
+			<rng:optional>
+				<rng:element name="TemperatureUnit">
+					<rng:ref name="TemperatureUnit"/>
+				</rng:element>
+			</rng:optional>
+			<a:documentation>default value is : minute</a:documentation>
+			<rng:optional>
+				<rng:element name="TimeUnit">
+					<rng:ref name="TimeUnit"/>
+				</rng:element>
+			</rng:optional>
+			<a:documentation>default value is : cubicFoot</a:documentation>
+			<rng:optional>
+				<rng:element name="VolumeUnit">
+					<rng:ref name="VolumeUnit"/>
+				</rng:element>
+			</rng:optional>
+			<a:documentation>default value is : pound</a:documentation>
+			<rng:optional>
+				<rng:element name="WeightUnit">
+					<rng:ref name="WeightUnit"/>
+				</rng:element>
+			</rng:optional>
+		</rng:interleave>
+	</rng:define>
+</rng:grammar>

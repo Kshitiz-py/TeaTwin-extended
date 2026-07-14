@@ -1,0 +1,571 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<rng:grammar xmlns:rng="http://relaxng.org/ns/structure/1.0"
+	datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes">
+	<!-- *****************************************************************************
+		
+		Extended Primitive Types
+				
+	    *****************************************************************************
+	    -->
+	<rng:define name="Identifier">
+		<rng:data type="string"/>
+	</rng:define>
+	
+	<rng:define name="URI"
+		datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes">
+		<rng:data type="anyURI"/>
+	</rng:define>
+	
+	<rng:define name="Timestamp">
+		<!--<rng:data type="dateTime"/>
+			does not work in some RelaxNG verifiers
+		-->
+		<rng:data type="string">
+			<rng:param name="pattern">([1-9]\d\d\d)-(0[1-9]|1[0-2])-(0[1-9]|[1-3][0-9])(T([0][0-9]|[1][0-9]|[2][0-4]):[0-5][0-9](:[0-5][0-9])?)?</rng:param>
+		</rng:data>
+	</rng:define>
+	
+	<rng:define name="Time">
+		<rng:data type="string">
+			<rng:param name="pattern">([0][0-9]|[1][0-9]|[2][0-4]):[0-5][0-9](:[0-5][0-9])?</rng:param>
+		</rng:data>
+	</rng:define>
+	
+	<rng:define name="Date">
+		<rng:data type="string">
+			<rng:param name="pattern">([1-9]\d\d\d)-(0[1-9]|1[0-2])-(0[1-9]|[1-3][0-9])</rng:param>
+		</rng:data>
+	</rng:define>
+	
+	<rng:define name="Integer">
+		<rng:data type="integer"/>
+	</rng:define>
+	
+	<rng:define name="Decimal">
+		<rng:data type="decimal"/>
+	</rng:define>
+	<rng:define name="NonNegativeInteger">
+		<rng:data type="nonNegativeInteger"/>
+	</rng:define>
+	
+	<rng:define name="String">
+		<rng:data type="string"/>
+	</rng:define>
+	<rng:define name="Boolean">
+		<rng:choice>
+			<rng:value>true</rng:value>
+			<rng:value>false</rng:value>
+		</rng:choice>
+	</rng:define>
+	<rng:define name="UnlimitedCardinality">
+		<rng:choice>
+			<rng:value>*</rng:value>
+		</rng:choice>
+	</rng:define>
+	
+	<rng:define name="CardinalitySpecification">
+		<rng:choice>
+			<rng:ref name="NonNegativeInteger"/>
+			<rng:ref name="UnlimitedCardinality"/>
+		</rng:choice>
+	</rng:define>
+	
+	<!-- *****************************************************************************
+				
+		Units of Measure related types
+		
+		*****************************************************************************
+		-->
+	
+	<rng:define name="TimeUnit">
+		<rng:choice>
+			<rng:value>second</rng:value>
+			<rng:value>minute</rng:value>
+			<rng:value>hour</rng:value>
+			<rng:value>day</rng:value>
+			<rng:value>month</rng:value>
+			<rng:value>week</rng:value>
+			<rng:value>year</rng:value>
+		</rng:choice>
+	</rng:define>
+	
+	
+	<rng:define name="LengthUnit">
+		<rng:choice>
+			<rng:value>millimeter</rng:value>
+			<rng:value>centimeter</rng:value>
+			<rng:value>meter</rng:value>
+			<rng:value>kilometer</rng:value>
+			<rng:value>inch</rng:value>
+			<rng:value>foot</rng:value>
+			<rng:value>yard</rng:value>
+			<rng:value>mile</rng:value>
+		</rng:choice>
+	</rng:define>
+	<rng:define name="WeightUnit">
+		<rng:choice>
+			<rng:value>ounce</rng:value>
+			<rng:value>pound</rng:value>
+			<rng:value>milligram</rng:value>
+			<rng:value>ton</rng:value>
+			<rng:value>centigram</rng:value>
+			<rng:value>gram</rng:value>
+			<rng:value>kilogram</rng:value>
+		</rng:choice>
+	</rng:define>
+	<rng:define name="AreaUnit">
+		<rng:choice>
+			<rng:value>squareInch</rng:value>
+			<rng:value>squareFoot</rng:value>
+			<rng:value>squareYard</rng:value>
+			<rng:value>squareCentimeter</rng:value>
+			<rng:value>squareMeter</rng:value>
+			<rng:value>squareKilometer</rng:value>
+			<rng:value>squareMile</rng:value>
+		</rng:choice>
+	</rng:define>
+	<rng:define name="VolumeUnit">
+		<rng:choice>
+			<rng:value>cubicCentimeter</rng:value>
+			<rng:value>cubicInch</rng:value>
+			<rng:value>cubicFoot</rng:value>
+			<rng:value>cubicMeter</rng:value>
+			<rng:value>cubicYard</rng:value>
+			<rng:value>milliliter</rng:value>
+			<rng:value>gallon</rng:value>
+			<rng:value>liter</rng:value>
+			<rng:value>pint</rng:value>
+			<rng:value>quart</rng:value>
+			<rng:value>ounce</rng:value>
+		</rng:choice>
+	</rng:define>
+	<rng:define name="PowerUnit">
+		<rng:choice>
+			<rng:value>horsepower</rng:value>
+			<rng:value>watt</rng:value>
+		</rng:choice>
+	</rng:define>
+	<rng:define name="SpeedUnit">
+		<rng:choice>
+			<rng:value>footPerSecond</rng:value>
+			<rng:value>kilometerPerHour</rng:value>
+			<rng:value>meterPerSecond</rng:value>
+			<rng:value>milePerHour</rng:value>
+		</rng:choice>
+	</rng:define>
+	<rng:define name="TemperatureUnit">
+		<rng:choice>
+			<rng:value>Celsius</rng:value>
+			<rng:value>Fahrenheit</rng:value>
+			<rng:value>kelvin</rng:value>
+		</rng:choice>
+	</rng:define>
+			
+	<rng:define name="CurrencyUnit">
+		<rng:data datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes"
+			type="string">
+			<!-- Currency codes are 3 digit capital letters
+				-->
+			<rng:param name="pattern">[A-Z]{3}</rng:param>
+		</rng:data>
+	</rng:define>
+	
+	
+		<!-- *****************************************************************************
+				
+		Metadata related types
+		
+		*****************************************************************************
+		-->
+	<rng:define name="PropertyType">
+		<rng:choice>
+			<rng:value>simple</rng:value>
+			<rng:value>reference</rng:value>
+			<rng:value>stochastic</rng:value>
+		</rng:choice>
+	</rng:define>
+	<rng:define name="ReferenceTypeName">
+		<rng:choice>
+			<rng:value>BillOfMaterialsReference</rng:value>
+			<rng:value>BillOfMaterialsComponentReference</rng:value>
+			<rng:value>CalendarReference</rng:value>
+			<rng:value>DistributionDefinitionReference</rng:value>
+			<rng:value>InventoryItemClassReference</rng:value>
+			<rng:value>InventoryItemReference</rng:value>
+			<rng:value>JobReference</rng:value>
+			<rng:value>LayoutElementReference</rng:value>
+			<rng:value>MaintenancePlanReference</rng:value>
+			<rng:value>MaintenanceProcessReference</rng:value>
+			<rng:value>OrderInformationReference</rng:value>
+			<rng:value>PartReference</rng:value>
+			<rng:value>PartTypeReference</rng:value>
+			<rng:value>ProcessPlanReference</rng:value>
+			<rng:value>ProcessReference</rng:value>
+			<rng:value>ReferenceMaterialReference</rng:value>
+			<rng:value>ResourceClassReference</rng:value>
+			<rng:value>ResourceReference</rng:value>
+			<rng:value>ScheduleInformationReference</rng:value>
+			<rng:value>SetupChangeoverReference</rng:value>
+			<rng:value>SetupDefinitionReference</rng:value>
+			<rng:value>SkillReference</rng:value>
+		</rng:choice>
+	</rng:define>
+	<rng:define name="SimpleDataTypeName">
+		<rng:choice>
+			<rng:value>Time</rng:value>
+			<rng:value>Date</rng:value>
+			<rng:value>Timestamp</rng:value>
+			<rng:value>String</rng:value>
+			<rng:value>Identifier</rng:value>
+			<rng:value>URI</rng:value>
+			<rng:value>Decimal</rng:value>
+			<rng:value>Boolean</rng:value>
+			<rng:value>Integer</rng:value>
+			<rng:value>NonNegativeInteger</rng:value>
+			<rng:value>AreaUnit</rng:value>
+			<rng:value>CurrencyUnit</rng:value>
+			<rng:value>LengthUnit</rng:value>
+			<rng:value>PowerUnit</rng:value>
+			<rng:value>SpeedUnit</rng:value>
+			<rng:value>TemperatureUnit</rng:value>
+			<rng:value>WeightUnit</rng:value>
+			<rng:value>TimeUnit</rng:value>
+			<rng:value>VolumeUnit</rng:value>
+		</rng:choice>
+	</rng:define>
+	
+	<rng:define name="UnitTypeName">
+		<rng:choice>
+			<rng:value>AreaUnit</rng:value>
+			<rng:value>CurrencyUnit</rng:value>
+			<rng:value>LengthUnit</rng:value>
+			<rng:value>PowerUnit</rng:value>
+			<rng:value>SpeedUnit</rng:value>
+			<rng:value>TemperatureUnit</rng:value>
+			<rng:value>WeightUnit</rng:value>
+			<rng:value>TimeUnit</rng:value>
+			<rng:value>VolumeUnit</rng:value>
+		</rng:choice>
+	</rng:define>
+	
+	
+	<rng:define name="PropertyExtensibleEntity">
+		<rng:choice>
+			<rng:value>Layout</rng:value>
+			<rng:value>LayoutElement</rng:value>
+			<rng:value>GraphicDescription</rng:value>
+			<rng:value>BillOfMaterials</rng:value>
+			<rng:value>LimitedUniqueEntity</rng:value>
+			<rng:value>IdentifiableEntity</rng:value>
+			<rng:value>UniqueEntity</rng:value>
+			<rng:value>ColorHighlight</rng:value>
+			<rng:value>ShapeLabelDefiniton</rng:value>
+			<rng:value>Event</rng:value>
+			<rng:value>ReferenceMaterial</rng:value>
+			<rng:value>CostAllocationData</rng:value>
+			<rng:value>DistributionDefinition</rng:value>
+			<rng:value>SetupChangeoverDefinition</rng:value>
+			<rng:value>SetupDefinition</rng:value>
+			<rng:value>SkillDefinition</rng:value>
+			<rng:value>SkillLevel</rng:value>
+			<rng:value>Connection</rng:value>
+			<rng:value>ResourceClass</rng:value>
+			<rng:value>MaintenancePlan</rng:value>
+			<rng:value>Resource</rng:value>
+			<rng:value>MaintenanceProcess</rng:value>
+			<rng:value>Process</rng:value>
+			<rng:value>Holiday</rng:value>
+			<rng:value>ProcessPlan</rng:value>
+			<rng:value>Shift</rng:value>
+			<rng:value>ShiftSchedule</rng:value>
+			<rng:value>Calendar</rng:value>
+			<rng:value>ScheduleItemEffortDescripton</rng:value>
+			<rng:value>Schedule</rng:value>
+			<rng:value>ScheduleItem</rng:value>
+			<rng:value>Job</rng:value>
+			<rng:value>JobEffortDescription</rng:value>
+			<rng:value>Order</rng:value>
+			<rng:value>OrderLine</rng:value>
+			<rng:value>InventoryItem</rng:value>
+			<rng:value>InventoryItemClass</rng:value>
+			<rng:value>CurvedSegment</rng:value>
+			<rng:value>PartType</rng:value>
+			<rng:value>ImageGraphic</rng:value>
+			<rng:value>Part</rng:value>
+			<rng:value>SegmentShape</rng:value>
+			<rng:value>StraightSegment</rng:value>
+			<rng:value>ModelGraphic</rng:value>
+			<rng:value>TextualAnnotation</rng:value>
+			<rng:value>LayoutObject</rng:value>
+		</rng:choice>
+	</rng:define>
+	
+	
+		<!-- *****************************************************************************
+				
+		Layout related types
+		
+		*****************************************************************************
+		-->
+	<!-- PixelLengthUnit allows LayoutLengthUnit  to extend LengthUnit-->
+	<rng:define name="PixelLengthUnit">
+		<rng:choice>
+			<rng:value>pixel</rng:value>
+		</rng:choice>
+	</rng:define>
+	<rng:define name="LayoutLengthUnit">
+		<rng:choice>
+			<rng:ref name="LengthUnit"/>
+			<rng:ref name="PixelLengthUnit"/>
+		</rng:choice>
+	</rng:define>
+	
+	
+	<rng:define name="TextAnchorLocation">
+		<rng:choice>
+			<rng:value>center</rng:value>
+			<rng:value>upperLeft</rng:value>
+		</rng:choice>
+	</rng:define>
+	
+	
+	<rng:define name="BasicShapeType">
+		<rng:choice>
+			<rng:value>box</rng:value>
+			<rng:value>circle</rng:value>
+			<rng:value>polygon</rng:value>
+		</rng:choice>
+	</rng:define>
+	
+	<rng:define name="CoordinateSystem">
+		<rng:choice>
+			<rng:value>centerBased</rng:value>
+			<rng:value>upperLeftBased</rng:value>
+		</rng:choice>
+	</rng:define>
+	
+	<rng:define name="BaseLocation">
+		<rng:choice>
+			<rng:value>floor</rng:value>
+			<rng:value>ceiling</rng:value>
+		</rng:choice>
+	</rng:define>
+	
+	
+	<rng:define name="ShapeDescriptionType">
+		<rng:choice>
+			<rng:value>basic</rng:value>
+			<rng:value>graphic</rng:value>
+			<rng:value>segment</rng:value>
+			<rng:value>text</rng:value>
+		</rng:choice>
+	</rng:define>
+	
+	<rng:define name="GraphicDescriptionType">
+		<rng:choice>
+			<rng:value>modelGraphic</rng:value>
+			<rng:value>imageGraphic</rng:value>
+		</rng:choice>
+	</rng:define>
+	
+	
+	
+	<rng:define name="ColorHexString">
+		<rng:data type="string">
+			<rng:param name="pattern">#[a-fA-F0-9]{6}</rng:param>
+		</rng:data>
+	</rng:define>
+	
+	
+	<rng:define name="ColorName">
+		<rng:choice>
+			<rng:value>aqua</rng:value>
+			<rng:value>black</rng:value>
+			<rng:value>blue</rng:value>
+			<rng:value>fuchsia</rng:value>
+			<rng:value>gray</rng:value>
+			<rng:value>green</rng:value>
+			<rng:value>lime</rng:value>
+			<rng:value>maroon</rng:value>
+			<rng:value>navy</rng:value>
+			<rng:value>olive</rng:value>
+			<rng:value>purple</rng:value>
+			<rng:value>red</rng:value>
+			<rng:value>sliver</rng:value>
+			<rng:value>teal</rng:value>
+			<rng:value>white</rng:value>
+			<rng:value>yellow</rng:value>
+		</rng:choice>
+	</rng:define>
+	
+	
+	<rng:define name="ColorDefinition">
+		<rng:choice>
+			<rng:ref name="ColorName"/>
+			<rng:ref name="ColorHexString"/>
+		</rng:choice>
+	</rng:define>
+	 
+	
+	
+	<rng:define name="SegmentType">
+		<rng:choice>
+			<rng:value>straight</rng:value>
+			<rng:value>curved</rng:value>
+		</rng:choice>
+	</rng:define>
+	
+	
+		<!-- *****************************************************************************
+				
+		Other Basic types
+		
+		*****************************************************************************
+		-->
+	
+	<rng:define name="ResourceType">
+		<rng:choice>
+			<rng:value>carrier</rng:value>
+			<rng:value>conveyor</rng:value>
+			<rng:value>crane</rng:value>
+			<rng:value>employee</rng:value>
+			<rng:value>fixture</rng:value>
+			<rng:value>machine</rng:value>
+			<rng:value>path</rng:value>
+			<rng:value>powerAndFree</rng:value>
+			<rng:value>station</rng:value>
+			<rng:value>tool</rng:value>
+			<rng:value>transporter</rng:value>
+			<rng:value>other</rng:value>
+		</rng:choice>
+	</rng:define>
+	
+	
+	<rng:define name="OrderStatus">
+		<rng:choice>
+			<rng:value>created</rng:value>
+			<rng:value>released</rng:value>
+			<rng:value>completed</rng:value>
+			<rng:value>shipped</rng:value>
+			<rng:value>cancelled</rng:value>
+			<rng:value>unknown</rng:value>
+		</rng:choice>
+	</rng:define>
+	
+	<rng:define name="ConnectionType">
+		<rng:choice>
+			<rng:value>input</rng:value>
+			<rng:value>output</rng:value>
+		</rng:choice>
+	</rng:define>
+	
+	<rng:define name="CostCategory">
+		<rng:choice>
+			<rng:value>indirect</rng:value>
+			<rng:value>labor</rng:value>
+			<rng:value>material</rng:value>
+			<rng:value>equipment</rng:value>
+			<rng:value>other</rng:value>
+		</rng:choice>
+	</rng:define>
+	<rng:define name="CostType">
+		<rng:choice>
+			<rng:value>fixed</rng:value>
+			<rng:value>variable</rng:value>
+		</rng:choice>
+	</rng:define>
+	
+	
+	<rng:define name="PartProductionStatus">
+		<rng:choice>
+			<rng:value>unknown</rng:value>
+			<rng:value>workInProcess</rng:value>
+			<rng:value>finishedGood</rng:value>
+		</rng:choice>
+	</rng:define>
+	
+	<rng:define name="JobStatus">
+		<rng:choice>
+			<rng:value>released</rng:value>
+			<rng:value>started</rng:value>
+			<rng:value>unknown</rng:value>
+			<rng:value>completed</rng:value>
+			<rng:value>cancelled</rng:value>
+			<rng:value>blocked</rng:value>
+		</rng:choice>
+	</rng:define>
+	
+	<rng:define name="PrecedenceRelationship">
+		<rng:choice>
+			<rng:value>SS</rng:value>
+			<rng:value>SF</rng:value>
+			<rng:value>FS</rng:value>
+			<rng:value>FF</rng:value>
+		</rng:choice>
+	</rng:define>
+	
+	
+	<rng:define name="ResourceStatus">
+		<rng:choice>
+			<rng:value>busy</rng:value>
+			<rng:value>idle</rng:value>
+			<rng:value>broken</rng:value>
+			<rng:value>underMaintenance</rng:value>
+			<rng:value>unknown</rng:value>
+		</rng:choice>		
+	</rng:define>
+	
+	
+	<rng:define name="Day">
+		<rng:choice>
+			<rng:value>sunday</rng:value>
+			<rng:value>monday</rng:value>
+			<rng:value>tuesday</rng:value>
+			<rng:value>wednesday</rng:value>
+			<rng:value>thursday</rng:value>
+			<rng:value>friday</rng:value>
+			<rng:value>saturday</rng:value>
+		</rng:choice>
+	</rng:define>
+	
+		
+	<rng:define name="InventoryItemType">
+		<rng:choice>
+			<rng:value>part</rng:value>
+			<rng:value>resource</rng:value>
+		</rng:choice>
+	</rng:define>
+	
+	
+	<rng:define name="ProcessGroupType">
+		<rng:choice>
+			<rng:value>sequence</rng:value>
+			<rng:value>concurrent</rng:value>
+			<rng:value>decision</rng:value>
+		</rng:choice>
+	</rng:define>
+	
+	<!-- These may be needed later
+		-->
+	
+	<!--
+	<rng:define name="YearPart">
+		<rng:data type="string">
+			<rng:param name="pattern">[1-9]\d\d\d</rng:param>
+		</rng:data>
+	</rng:define>
+	<rng:define name="MonthPart">
+		<rng:data type="positiveInteger">
+			<rng:param name="pattern">[0-1][0-9]</rng:param>
+			<rng:param name="maxInclusive">12</rng:param>
+		</rng:data>
+	</rng:define>
+	<rng:define name="DayPart">
+		<rng:data type="positiveInteger">
+			<rng:param name="pattern">[0-3][0-9]</rng:param>
+			<rng:param name="maxInclusive">31</rng:param>
+		</rng:data>
+	</rng:define>-->
+	
+</rng:grammar>

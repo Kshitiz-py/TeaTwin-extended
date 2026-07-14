@@ -1,0 +1,214 @@
+<mxfile host="Electron" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/29.6.1 Chrome/142.0.7444.265 Electron/39.8.0 Safari/537.36" version="29.6.1">
+  <diagram name="System Architecture" id="arch_diagram_01">
+    <mxGraphModel dx="1256" dy="583" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="bg_ai" parent="1" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;dashPattern=1 2;fillColor=#f5f5f5;strokeColor=#666666;verticalAlign=top;fontStyle=1;fontSize=14;spacingTop=10;" value="Design Time: AI Agent" vertex="1">
+          <mxGeometry height="180" width="280" x="235" y="186" as="geometry" />
+        </mxCell>
+        <mxCell id="bg_twin" parent="1" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;dashPattern=1 2;fillColor=#f5f5f5;strokeColor=#666666;verticalAlign=top;fontStyle=1;fontSize=14;spacingTop=10;" value="Runtime: CMSD Twin Service" vertex="1">
+          <mxGeometry height="180" width="280" x="235" y="406" as="geometry" />
+        </mxCell>
+        <mxCell id="bg_dash" parent="1" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;dashPattern=1 2;fillColor=#f5f5f5;strokeColor=#666666;verticalAlign=top;fontStyle=1;fontSize=14;spacingTop=10;" value="Web Dashboard" vertex="1">
+          <mxGeometry height="400" width="240" x="815" y="186" as="geometry" />
+        </mxCell>
+        <mxCell id="src_sap" parent="1" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1" value="SAP API&#xa;(Master Data)" vertex="1">
+          <mxGeometry height="80" width="120" x="41" y="246" as="geometry" />
+        </mxCell>
+        <mxCell id="src_mes" parent="1" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#66B2FF;strokeColor=#007FFF;fontStyle=1" value="MES API&#xa;(Operational Data)" vertex="1">
+          <mxGeometry height="80" width="120" x="41" y="476" as="geometry" />
+        </mxCell>
+        <mxCell id="ai_llm" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="LLM Client&#xa;(Provider Agnostic)" vertex="1">
+          <mxGeometry height="50" width="110" x="255" y="236" as="geometry" />
+        </mxCell>
+        <mxCell id="ai_rag" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="RAG Retriever &amp;amp;&#xa;Vector Store" vertex="1">
+          <mxGeometry height="50" width="110" x="385" y="236" as="geometry" />
+        </mxCell>
+        <mxCell id="ai_eng" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="Mapping Engine&#xa;(Confidence Scores)" vertex="1">
+          <mxGeometry height="50" width="110" x="320" y="306" as="geometry" />
+        </mxCell>
+        <mxCell id="config_store" parent="1" style="shape=document;whiteSpace=wrap;html=1;boundedLbl=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontStyle=1;size=0.15;" value="Shared Config Store&#xa;(JSON Mappings)" vertex="1">
+          <mxGeometry height="80" width="140" x="595" y="406" as="geometry" />
+        </mxCell>
+        <mxCell id="twin_fact" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" value="MappingDrivenFactory&#xa;(DAG Builder)" vertex="1">
+          <mxGeometry height="50" width="130" x="255" y="466" as="geometry" />
+        </mxCell>
+        <mxCell id="twin_diff" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" value="ChangeDetector&#xa;(Diffs Snapshots)" vertex="1">
+          <mxGeometry height="50" width="100" x="400" y="466" as="geometry" />
+        </mxCell>
+        <mxCell id="twin_bus" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" value="EventBus&#xa;(WebSocket)" vertex="1">
+          <mxGeometry height="50" width="100" x="325" y="528" as="geometry" />
+        </mxCell>
+        <mxCell id="dash_wiz" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1" value="Guided Mapping Wizard&#xa;(Human-in-the-Loop)" vertex="1">
+          <mxGeometry height="60" width="180" x="845" y="256" as="geometry" />
+        </mxCell>
+        <mxCell id="dash_mon" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1" value="Live Twin Monitor&#xa;(CMSD Dashboard)" vertex="1">
+          <mxGeometry height="60" width="180" x="855" y="516" as="geometry" />
+        </mxCell>
+        <mxCell id="e_sap_ai" edge="1" parent="1" source="src_sap" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;endArrow=classic;strokeColor=#82b366;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="221" y="286" />
+              <mxPoint x="221" y="286" />
+            </Array>
+            <mxPoint x="236" y="286" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="lbl_sap_ai" connectable="0" parent="e_sap_ai" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];labelBackgroundColor=#ffffff;" value="REST payload" vertex="1">
+          <mxGeometry relative="1" x="0.2" as="geometry">
+            <mxPoint x="-9" y="-15" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_sap_twin" edge="1" parent="1" source="src_sap" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;endArrow=classic;strokeColor=#82b366;exitX=0.998;exitY=0.545;exitDx=0;exitDy=0;exitPerimeter=0;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="201" y="290" />
+              <mxPoint x="201" y="451" />
+            </Array>
+            <mxPoint x="235" y="451" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="lbl_sap_twin" connectable="0" parent="e_sap_twin" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];labelBackgroundColor=#ffffff;" value="Live Polling" vertex="1">
+          <mxGeometry relative="1" x="0.6" as="geometry">
+            <mxPoint x="-20" y="-16" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_mes_ai" edge="1" parent="1" source="src_mes" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;endArrow=classic;strokeColor=#007FFF;exitX=1;exitY=0.5;exitDx=0;exitDy=0;exitPerimeter=0;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="221" y="516" />
+              <mxPoint x="221" y="321" />
+            </Array>
+            <mxPoint x="236" y="321" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="U5OH9OzPnAEl9v-YPX5S-1" connectable="0" parent="e_mes_ai" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" value="REST payload" vertex="1">
+          <mxGeometry relative="1" x="0.2229" y="1" as="geometry">
+            <mxPoint x="21" y="-15" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_mes_twin" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;endArrow=classic;strokeColor=#007FFF;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="161" y="526" />
+            </Array>
+            <mxPoint x="161" y="526" as="sourcePoint" />
+            <mxPoint x="234" y="527" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="lbl_mes_twin" connectable="0" parent="e_mes_twin" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];labelBackgroundColor=#ffffff;" value="Live Polling" vertex="1">
+          <mxGeometry relative="1" x="0.2" as="geometry">
+            <mxPoint x="-13" y="10" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_ai_dash" edge="1" parent="1" source="bg_ai" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;startArrow=classic;endArrow=classic;strokeColor=#6c8ebf;" target="dash_wiz">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="lbl_ai_dash" connectable="0" parent="e_ai_dash" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];labelBackgroundColor=#ffffff;" value="Orchestrates Proposals /&#xa;HITL Feedback" vertex="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_dash_cfg" edge="1" parent="1" source="dash_wiz" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;endArrow=classic;strokeColor=#d79b00;" target="config_store">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="935" y="446" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="lbl_dash_cfg" connectable="0" parent="e_dash_cfg" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];labelBackgroundColor=#ffffff;" value="Writes Confirmed JSON" vertex="1">
+          <mxGeometry relative="1" x="0.2" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_cfg_twin" edge="1" parent="1" source="config_store" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;endArrow=classic;strokeColor=#d79b00;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" target="bg_twin">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="665" y="496" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="lbl_cfg_twin" connectable="0" parent="e_cfg_twin" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];labelBackgroundColor=#ffffff;" value="Reads JSON Config" vertex="1">
+          <mxGeometry relative="1" x="0.3" as="geometry">
+            <mxPoint x="24" y="10" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_twin_dash" edge="1" parent="1" source="bg_twin" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;endArrow=classic;strokeColor=#d6b656;exitX=1.006;exitY=0.79;exitDx=0;exitDy=0;exitPerimeter=0;" target="dash_mon">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="lbl_twin_dash" connectable="0" parent="e_twin_dash" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];labelBackgroundColor=#ffffff;" value="WebSocket Publishes&#xa;(CMSD Changes)" vertex="1">
+          <mxGeometry relative="1" x="0.1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="U5OH9OzPnAEl9v-YPX5S-2" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#bdbdbd;strokeWidth=1;dashed=0;" value="" vertex="1">
+          <mxGeometry height="120" width="1020" x="35" y="14" as="geometry" />
+        </mxCell>
+        <mxCell id="U5OH9OzPnAEl9v-YPX5S-3" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;fontSize=10;fontStyle=1;fontColor=#757575;" value="INFRASTRUCTURE" vertex="1">
+          <mxGeometry height="16" width="120" x="45" y="17" as="geometry" />
+        </mxCell>
+        <mxCell id="U5OH9OzPnAEl9v-YPX5S-4" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9e9e9e;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="70" width="220" x="80" y="44" as="geometry" />
+        </mxCell>
+        <mxCell id="U5OH9OzPnAEl9v-YPX5S-5" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=11;fontStyle=1;fontColor=#424242;" value="Vector Store" vertex="1">
+          <mxGeometry height="20" width="140" x="120" y="50" as="geometry" />
+        </mxCell>
+        <mxCell id="U5OH9OzPnAEl9v-YPX5S-6" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=9;fontColor=#757575;" value="CMSD field catalog + ASMG requirements&lt;br&gt;~2,500 chars curated context" vertex="1">
+          <mxGeometry height="35" width="210" x="85" y="72" as="geometry" />
+        </mxCell>
+        <mxCell id="U5OH9OzPnAEl9v-YPX5S-7" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9e9e9e;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="70" width="220" x="424" y="44" as="geometry" />
+        </mxCell>
+        <mxCell id="U5OH9OzPnAEl9v-YPX5S-8" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=11;fontStyle=1;fontColor=#424242;" value="Local Embedding Model" vertex="1">
+          <mxGeometry height="20" width="180" x="444" y="50" as="geometry" />
+        </mxCell>
+        <mxCell id="U5OH9OzPnAEl9v-YPX5S-9" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=9;fontColor=#757575;" value="On-premises or hosted somewhere else" vertex="1">
+          <mxGeometry height="35" width="210" x="429" y="72" as="geometry" />
+        </mxCell>
+        <mxCell id="U5OH9OzPnAEl9v-YPX5S-10" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9e9e9e;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="70" width="240" x="785" y="44" as="geometry" />
+        </mxCell>
+        <mxCell id="U5OH9OzPnAEl9v-YPX5S-11" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=11;fontStyle=1;fontColor=#424242;" value="Chat API (Cloud or Local)" vertex="1">
+          <mxGeometry height="20" width="180" x="815" y="50" as="geometry" />
+        </mxCell>
+        <mxCell id="U5OH9OzPnAEl9v-YPX5S-12" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=9;fontColor=#757575;" value="Reasoning workload with any&amp;nbsp;provider" vertex="1">
+          <mxGeometry height="35" width="210" x="800" y="72" as="geometry" />
+        </mxCell>
+        <mxCell id="U5OH9OzPnAEl9v-YPX5S-13" edge="1" parent="1" source="bg_ai" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=1;entryDx=0;entryDy=0;curved=0;" target="U5OH9OzPnAEl9v-YPX5S-4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="U5OH9OzPnAEl9v-YPX5S-20" connectable="0" parent="U5OH9OzPnAEl9v-YPX5S-13" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" value="&lt;span style=&quot;color: rgb(97, 97, 97); font-size: 9px;&quot;&gt;semantic search&lt;/span&gt;&lt;br style=&quot;color: rgb(63, 63, 63); scrollbar-color: rgb(226, 226, 226) rgb(251, 251, 251); font-size: 9px;&quot;&gt;&lt;span style=&quot;color: rgb(97, 97, 97); font-size: 9px;&quot;&gt;(RAG context)&lt;/span&gt;" vertex="1">
+          <mxGeometry relative="1" x="0.4308" y="1" as="geometry">
+            <mxPoint x="-75" y="-1" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="U5OH9OzPnAEl9v-YPX5S-14" edge="1" parent="1" source="bg_ai" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=1;entryDx=0;entryDy=0;curved=0;" target="U5OH9OzPnAEl9v-YPX5S-7">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="U5OH9OzPnAEl9v-YPX5S-21" connectable="0" parent="U5OH9OzPnAEl9v-YPX5S-14" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" value="&lt;span style=&quot;color: rgb(97, 97, 97); font-size: 9px;&quot;&gt;embedding&lt;/span&gt;&lt;br style=&quot;color: rgb(63, 63, 63); scrollbar-color: rgb(226, 226, 226) rgb(251, 251, 251); font-size: 9px;&quot;&gt;&lt;span style=&quot;color: rgb(97, 97, 97); font-size: 9px;&quot;&gt;generation&lt;/span&gt;" vertex="1">
+          <mxGeometry relative="1" x="0.8545" as="geometry">
+            <mxPoint x="1" y="35" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="U5OH9OzPnAEl9v-YPX5S-16" edge="1" parent="1" source="bg_ai" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;curved=0;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="375" y="151" />
+              <mxPoint x="805" y="151" />
+              <mxPoint x="805" y="116" />
+            </Array>
+            <mxPoint x="805" y="116" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="U5OH9OzPnAEl9v-YPX5S-22" connectable="0" parent="U5OH9OzPnAEl9v-YPX5S-16" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" value="&lt;span style=&quot;color: rgb(97, 97, 97); font-size: 9px;&quot;&gt;LLM API call&lt;/span&gt;&lt;br style=&quot;color: rgb(63, 63, 63); scrollbar-color: rgb(226, 226, 226) rgb(251, 251, 251); font-size: 9px;&quot;&gt;&lt;span style=&quot;color: rgb(97, 97, 97); font-size: 9px;&quot;&gt;(propose mapping)&lt;/span&gt;" vertex="1">
+          <mxGeometry relative="1" x="0.9031" as="geometry">
+            <mxPoint x="43" y="11" as="offset" />
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

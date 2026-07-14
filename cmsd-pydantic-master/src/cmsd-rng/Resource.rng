@@ -1,0 +1,289 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<rng:grammar xmlns:rng="http://relaxng.org/ns/structure/1.0"
+	xmlns:a="http://relaxng.org/ns/compatibility/annotations/1.0"
+	xmlns:sch="http://www.ascc.net/xml/schematron" 
+	datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes">
+	
+	
+	<!-- *****************************************************************************
+		
+		Definitions for Resource and Resourcelass 
+						
+	    *****************************************************************************
+	    -->
+	
+	<rng:define name="UniqueEntity" combine="choice">
+		<rng:element name="ResourceClass">
+			<rng:ref name="ResourceClass"/>
+		</rng:element>
+	</rng:define>
+	
+	<rng:define name="ResourceClass">
+		<rng:interleave>
+			<rng:ref name="IdentifiableEntityFrontGroup"/>
+			<rng:element name="ResourceType">
+				<rng:ref name="ResourceType"/>
+			</rng:element>
+			<rng:optional>
+				<rng:element name="Name">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="HourlyRate">
+					<rng:ref name="CurrencyType"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="Size">
+					<rng:ref name="GrossDimensions"/>
+				</rng:element>
+			</rng:optional>
+			<rng:ref name="IdentifiableEntityBackGroup"/>
+		</rng:interleave>
+	</rng:define>
+	
+	
+	<rng:define name="UniqueEntity" combine="choice">
+		<rng:element name="Resource">
+			<rng:ref name="Resource"/>
+		</rng:element>
+	</rng:define>
+	<rng:define name="Resource">
+		<a:documentation>
+			<sch:pattern xmlns:xs="http://www.w3.org/2001/XMLSchema"
+				name="Resource.EmployeeSkill check">
+				<sch:rule context="element(*, Resource)[EmployeeSkill]">
+					<sch:assert test="ResourceType = 'employee'">If EmployeeSkill is present in
+						a Resource element, the ResourceType must be 'employee'</sch:assert>
+				</sch:rule>
+			</sch:pattern>
+			<sch:pattern xmlns:xs="http://www.w3.org/2001/XMLSchema"
+				name="Resource.CurrentSetup check">
+				<sch:rule context="element(*, Resource)[CurrentSetup]">
+					<sch:assert test="ResourceType != 'employee'">If an CurrentSetup element is
+						present in a Resource element, the ResourceType must not be 'employee'</sch:assert>
+				</sch:rule>
+			</sch:pattern>
+		</a:documentation>
+
+		<rng:interleave>
+			<rng:ref name="IdentifiableEntityFrontGroup"/>
+			<rng:element name="ResourceType">
+				<rng:ref name="ResourceType"/>
+			</rng:element>
+			<rng:optional>
+				<rng:element name="ResourceClass">
+					<rng:ref name="ResourceClassReference"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="Name">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="CurrentStatus">
+					<rng:ref name="ResourceStatus"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="CurrentSetup">
+					<rng:ref name="SetupDefinitionReference"/>
+				</rng:element>
+			</rng:optional>
+			<rng:zeroOrMore>
+				<rng:element name="ShiftAssignment">
+					<rng:ref name="CalendarReference"/>
+				</rng:element>
+			</rng:zeroOrMore>
+			<rng:zeroOrMore>
+				<rng:element name="AssociatedResource">
+					<rng:ref name="ResourceReference"/>
+				</rng:element>
+			</rng:zeroOrMore>
+			<rng:optional>
+				<rng:element name="HourlyRate">
+					<rng:ref name="CurrencyType"/>
+				</rng:element>
+			</rng:optional>
+			<rng:zeroOrMore>
+				<rng:element name="EmployeeSkill">
+					<rng:ref name="SkillReference"/>
+				</rng:element>
+			</rng:zeroOrMore>
+			<rng:optional>
+				<rng:element name="GroupDefinition">
+					<rng:ref name="ResourceGroupInformation"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="Size">
+					<rng:ref name="GrossDimensions"/>
+				</rng:element>
+			</rng:optional>
+			<rng:ref name="IdentifiableEntityBackGroup"/>
+		</rng:interleave>
+	</rng:define>
+	
+	<!-- *****************************************************************************
+		
+		Definitions for ResourceGroupInformation and related elements
+						
+	    *****************************************************************************
+	    -->
+	<rng:define name="ResourceGroupInformation">
+		<rng:interleave>
+			<rng:oneOrMore>
+				<rng:element name="ResourceGroupMember">
+					<rng:ref name="ResourceGroupMember"/>
+				</rng:element>
+			</rng:oneOrMore>
+			<rng:zeroOrMore>
+				<rng:element name="Connection">
+					<rng:ref name="Connection"/>
+				</rng:element>
+			</rng:zeroOrMore>
+		</rng:interleave>
+	</rng:define>
+		
+	<rng:define name="ResourceGroupMember">
+		<rng:ref name="ResourceReference"/>
+	</rng:define>
+	 
+	<rng:define name="Connection">
+		<a:documentation>
+			<sch:pattern xmlns:xs="http://www.w3.org/2001/XMLSchema" name="Connection">
+				<sch:rule context="element(*, Connection)">
+					<sch:assert test="count(FromResource) + count(ToResource) &gt; 0">The
+						Connection element must contain at least one of the elements FromResource
+						and ToResource</sch:assert>
+				</sch:rule>
+			</sch:pattern>
+		</a:documentation>
+
+		<rng:interleave>
+			<rng:ref name="IdentifiableEntityFrontGroup"/>
+			<rng:optional>
+				<rng:element name="FromResource">
+					<rng:ref name="ResourceReference"/>
+				</rng:element>
+			</rng:optional>
+			<rng:optional>
+				<rng:element name="ToResource">
+					<rng:ref name="ResourceReference"/>
+				</rng:element>
+			</rng:optional>
+			<rng:ref name="IdentifiableEntityBackGroup"/>
+		</rng:interleave>
+	</rng:define>
+	 
+	 <!-- *****************************************************************************
+		
+		Definitions for SkillDefinition and SkillLevel 
+						
+	    *****************************************************************************
+	    -->
+	<rng:define name="UniqueEntity" combine="choice">
+		<rng:element name="SkillDefinition">
+			<rng:ref name="SkillDefinition"/>
+		</rng:element>
+	</rng:define>
+	<rng:define name="SkillDefinition">
+		<rng:interleave>
+			<rng:ref name="IdentifiableEntityFrontGroup"/>
+			<rng:optional>
+				<rng:element name="Name">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<rng:zeroOrMore>
+				<rng:element name="SkillLevel">
+					<rng:ref name="SkillLevel"/>
+				</rng:element>
+			</rng:zeroOrMore>
+			<rng:ref name="IdentifiableEntityBackGroup"/>
+		</rng:interleave>
+	</rng:define>
+	
+	<rng:define name="SkillLevel">
+		<rng:interleave>
+			<rng:ref name="IdentifiableEntityFrontGroup"/>
+			<rng:optional>
+				<rng:element name="Name">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<rng:ref name="IdentifiableEntityBackGroup"/>
+		</rng:interleave>
+	</rng:define>
+	
+	 <!-- *****************************************************************************
+		
+		Definitions for Setup Related elements
+						
+	    *****************************************************************************
+	    -->
+	<rng:define name="UniqueEntity" combine="choice">
+		<rng:element name="SetupDefinition">
+			<rng:ref name="SetupDefinition"/>
+		</rng:element>
+	</rng:define>
+	<rng:define name="SetupDefinition">
+		<rng:interleave>
+			<rng:ref name="IdentifiableEntityFrontGroup"/>
+			<rng:element name="SetupResource">
+				<rng:ref name="ResourceReference"/>
+			</rng:element>
+			<rng:optional>
+				<rng:element name="Name">
+					<rng:ref name="String"/>
+				</rng:element>
+			</rng:optional>
+			<rng:zeroOrMore>
+				<rng:element name="SetupComponent">
+					<rng:ref name="ResourceReference"/>
+				</rng:element>
+			</rng:zeroOrMore>
+			<rng:zeroOrMore>
+				<rng:element name="ChildSetup">
+					<rng:ref name="SetupDefinitionReference"/>
+				</rng:element>
+			</rng:zeroOrMore>
+			<rng:ref name="IdentifiableEntityBackGroup"/>
+		</rng:interleave>
+	</rng:define>
+		
+	<rng:define name="UniqueEntity" combine="choice">
+		<rng:element name="SetupChangeoverDefinition">
+			<rng:ref name="SetupChangeoverDefinition"/>
+		</rng:element>
+	</rng:define>
+	
+	<rng:define name="SetupChangeoverDefinition">
+		<rng:interleave>
+			<rng:ref name="IdentifiableEntityFrontGroup"/>
+			<rng:element name="CurrentSetup">
+				<rng:ref name="SetupDefinitionReference"/>
+			</rng:element>
+			<rng:oneOrMore>
+				<rng:element name="NewSetup">
+					<rng:ref name="NewSetup"/>
+				</rng:element>
+			</rng:oneOrMore>
+			<rng:ref name="IdentifiableEntityBackGroup"/>
+		</rng:interleave>
+	</rng:define>
+	
+	
+	
+	<rng:define name="NewSetup">
+		<rng:interleave>
+			<rng:ref name="SetupDefinitionReference"/>
+			<rng:element name="ChangeoverTime">
+				<rng:ref name="Duration"/>
+			</rng:element>
+		</rng:interleave>
+	</rng:define>
+</rng:grammar>

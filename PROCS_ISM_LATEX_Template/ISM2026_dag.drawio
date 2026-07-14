@@ -1,0 +1,164 @@
+<mxfile host="Electron" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/29.6.1 Chrome/142.0.7444.265 Electron/39.8.0 Safari/537.36" version="29.6.1">
+  <diagram name="Entity Dependency DAG" id="dag-main">
+    <mxGraphModel dx="769" dy="357" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="950" pageHeight="700" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="VeHlnuPWDMsr-0eikyRi-2" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="" vertex="1">
+          <mxGeometry height="311" width="110" x="28" y="85" as="geometry" />
+        </mxCell>
+        <mxCell id="band1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e8f5e9;strokeColor=#a5d6a7;strokeWidth=1;dashed=1;dashPattern=4 4;" value="" vertex="1">
+          <mxGeometry height="60" width="680" x="115" y="90" as="geometry" />
+        </mxCell>
+        <mxCell id="phase1-label" parent="1" style="text;html=1;strokeColor=none;fillColor=#43a047;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=1;fontSize=10;fontStyle=1;fontColor=#ffffff;" value="Phase 1" vertex="1">
+          <mxGeometry height="24" width="40" x="65" y="90" as="geometry" />
+        </mxCell>
+        <mxCell id="VeHlnuPWDMsr-0eikyRi-3" edge="1" parent="1" source="phase1-note" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="phase2-label">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="phase1-note" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=8;fontColor=#757575;fontStyle=2;" value="No dependencies&lt;br&gt;any order within phase" vertex="1">
+          <mxGeometry height="22" width="100" x="35" y="118" as="geometry" />
+        </mxCell>
+        <mxCell id="node-rc" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#43a047;strokeWidth=2;" value="" vertex="1">
+          <mxGeometry height="40" width="175" x="145" y="100" as="geometry" />
+        </mxCell>
+        <mxCell id="label-rc" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=12;fontStyle=1;fontColor=#1b5e20;" value="ResourceClass" vertex="1">
+          <mxGeometry height="20" width="145" x="160" y="100" as="geometry" />
+        </mxCell>
+        <mxCell id="label-rc-sub" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=8;fontColor=#757575;" value="6 fields (5 string, 1 numeric)" vertex="1">
+          <mxGeometry height="20" width="165" x="150" y="122" as="geometry" />
+        </mxCell>
+        <mxCell id="node-cal" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#43a047;strokeWidth=2;" value="" vertex="1">
+          <mxGeometry height="40" width="160" x="375" y="100" as="geometry" />
+        </mxCell>
+        <mxCell id="label-cal" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=12;fontStyle=1;fontColor=#1b5e20;" value="Calendar" vertex="1">
+          <mxGeometry height="20" width="120" x="395" y="100" as="geometry" />
+        </mxCell>
+        <mxCell id="label-cal-sub" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=8;fontColor=#757575;" value="Shifts, breaks, holidays" vertex="1">
+          <mxGeometry height="20" width="150" x="380" y="122" as="geometry" />
+        </mxCell>
+        <mxCell id="node-pt" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#43a047;strokeWidth=2;" value="" vertex="1">
+          <mxGeometry height="40" width="175" x="590" y="100" as="geometry" />
+        </mxCell>
+        <mxCell id="label-pt" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=12;fontStyle=1;fontColor=#1b5e20;" value="PartType" vertex="1">
+          <mxGeometry height="20" width="105" x="625" y="100" as="geometry" />
+        </mxCell>
+        <mxCell id="label-pt-sub" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=8;fontColor=#757575;" value="5 fields (4 string, 1 numeric)" vertex="1">
+          <mxGeometry height="20" width="145" x="605" y="122" as="geometry" />
+        </mxCell>
+        <mxCell id="band2" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff8e1;strokeColor=#ffe082;strokeWidth=1;dashed=1;dashPattern=4 4;" value="" vertex="1">
+          <mxGeometry height="60" width="680" x="115" y="169" as="geometry" />
+        </mxCell>
+        <mxCell id="phase2-label" parent="1" style="text;html=1;strokeColor=none;fillColor=#f9a825;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=1;fontSize=10;fontStyle=1;fontColor=#ffffff;" value="Phase 2" vertex="1">
+          <mxGeometry height="24" width="40" x="65" y="169" as="geometry" />
+        </mxCell>
+        <mxCell id="node-res" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#f9a825;strokeWidth=2;" value="" vertex="1">
+          <mxGeometry height="40" width="175" x="145" y="182" as="geometry" />
+        </mxCell>
+        <mxCell id="label-res" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=12;fontStyle=1;fontColor=#e65100;" value="Resource" vertex="1">
+          <mxGeometry height="20" width="125" x="170" y="182" as="geometry" />
+        </mxCell>
+        <mxCell id="label-res-sub" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=8;fontColor=#757575;" value="20 fields (7 string, 7 numeric, 6 null-prone)" vertex="1">
+          <mxGeometry height="20" width="165" x="150" y="204" as="geometry" />
+        </mxCell>
+        <mxCell id="node-bom" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#f9a825;strokeWidth=2;" value="" vertex="1">
+          <mxGeometry height="40" width="175" x="590" y="182" as="geometry" />
+        </mxCell>
+        <mxCell id="label-bom" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=12;fontStyle=1;fontColor=#795548;" value="BillOfMaterials" vertex="1">
+          <mxGeometry height="20" width="135" x="610" y="182" as="geometry" />
+        </mxCell>
+        <mxCell id="label-bom-sub" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=8;fontColor=#757575;" value="Nested components, hierarchical structure" vertex="1">
+          <mxGeometry height="20" width="175" x="590" y="204" as="geometry" />
+        </mxCell>
+        <mxCell id="band3" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e3f2fd;strokeColor=#90caf9;strokeWidth=1;dashed=1;dashPattern=4 4;" value="" vertex="1">
+          <mxGeometry height="60" width="680" x="115" y="250" as="geometry" />
+        </mxCell>
+        <mxCell id="phase3-label" parent="1" style="text;html=1;strokeColor=none;fillColor=#1e88e5;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=1;fontSize=10;fontStyle=1;fontColor=#ffffff;" value="Phase 3" vertex="1">
+          <mxGeometry height="24" width="40" x="65" y="250" as="geometry" />
+        </mxCell>
+        <mxCell id="VeHlnuPWDMsr-0eikyRi-8" edge="1" parent="1" source="phase3-note" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="phase4-label">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="phase3-note" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=8;fontColor=#757575;fontStyle=2;" value="Dependencies from Phases 1-2 met" vertex="1">
+          <mxGeometry height="14" width="100" x="35" y="277" as="geometry" />
+        </mxCell>
+        <mxCell id="node-ord" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#1e88e5;strokeWidth=2;" value="" vertex="1">
+          <mxGeometry height="40" width="175" x="368" y="261" as="geometry" />
+        </mxCell>
+        <mxCell id="label-ord" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=12;fontStyle=1;fontColor=#0d47a1;" value="Order" vertex="1">
+          <mxGeometry height="18" width="95" x="408" y="268" as="geometry" />
+        </mxCell>
+        <mxCell id="label-ord-sub" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=8;fontColor=#757575;" value="4 fields (all string)&amp;nbsp;" vertex="1">
+          <mxGeometry height="18" width="165" x="373" y="282" as="geometry" />
+        </mxCell>
+        <mxCell id="band4" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f3e5f5;strokeColor=#ce93d8;strokeWidth=1;dashed=1;dashPattern=4 4;" value="" vertex="1">
+          <mxGeometry height="60" width="680" x="115" y="330" as="geometry" />
+        </mxCell>
+        <mxCell id="phase4-label" parent="1" style="text;html=1;strokeColor=none;fillColor=#8e24aa;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=1;fontSize=10;fontStyle=1;fontColor=#ffffff;" value="Phase 4" vertex="1">
+          <mxGeometry height="24" width="40" x="65" y="330" as="geometry" />
+        </mxCell>
+        <mxCell id="phase4-note" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=8;fontColor=#757575;fontStyle=2;" value="All prior dependencies met" vertex="1">
+          <mxGeometry height="14" width="90" x="35" y="357" as="geometry" />
+        </mxCell>
+        <mxCell id="node-job" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#8e24aa;strokeWidth=2;" value="" vertex="1">
+          <mxGeometry height="40" width="175" x="368" y="340" as="geometry" />
+        </mxCell>
+        <mxCell id="label-job" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=12;fontStyle=1;fontColor=#6a1b9a;" value="Job" vertex="1">
+          <mxGeometry height="18" width="75" x="418" y="339" as="geometry" />
+        </mxCell>
+        <mxCell id="label-job-sub" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=8;fontColor=#757575;" value="References Order &amp; Resource via planned_effort" vertex="1">
+          <mxGeometry height="18" width="175" x="368" y="359" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-rc-res" edge="1" parent="1" source="node-rc" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeColor=#757575;strokeWidth=1.5;fontSize=8;fontColor=#616161;fontStyle=2;endArrow=classic;" target="node-res" value="classifies">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-pt-bom" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeColor=#757575;strokeWidth=1.5;fontSize=8;fontColor=#616161;fontStyle=2;endArrow=classic;" value="component of">
+          <mxGeometry relative="1" x="-0.0476" y="28" as="geometry">
+            <mxPoint as="offset" />
+            <mxPoint x="677.5" y="140" as="sourcePoint" />
+            <mxPoint x="677.5" y="182" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge-res-ord" edge="1" parent="1" source="node-res" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#757575;strokeWidth=1.5;fontSize=8;fontColor=#616161;fontStyle=2;endArrow=classic;curved=0;" target="node-ord" value="consumed by">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-cal-ord" edge="1" parent="1" source="node-cal" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;strokeColor=#757575;strokeWidth=1.5;fontSize=8;fontColor=#616161;fontStyle=2;endArrow=classic;entryX=0.497;entryY=-0.055;entryDx=0;entryDy=0;entryPerimeter=0;" target="node-ord" value="schedules">
+          <mxGeometry relative="1" x="-0.093" y="1" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points" />
+            <mxPoint x="455" y="260" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge-pt-ord" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#757575;strokeWidth=1.5;fontSize=8;fontColor=#616161;fontStyle=2;endArrow=classic;curved=0;" target="node-ord" value="referenced by order_lines[ ].part_type">
+          <mxGeometry relative="1" x="0.3594" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="678" y="160" />
+              <mxPoint x="585" y="160" />
+              <mxPoint x="585" y="281" />
+            </Array>
+            <mxPoint x="677.5" y="150" as="sourcePoint" />
+            <mxPoint x="550" y="395" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge-ord-job" edge="1" parent="1" source="node-ord" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeColor=#757575;strokeWidth=1.5;fontSize=8;fontColor=#616161;fontStyle=2;endArrow=classic;" target="node-job" value="fulfilled by">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-res-job" edge="1" parent="1" source="label-res-sub" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;strokeColor=#757575;strokeWidth=1.5;fontSize=8;fontColor=#616161;fontStyle=2;endArrow=classic;curved=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="node-job" value="assigned to">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="233" y="360" />
+            </Array>
+            <mxPoint x="385" y="400" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="VeHlnuPWDMsr-0eikyRi-7" edge="1" parent="1" source="phase2-note" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="phase3-label">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="phase2-note" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=8;fontColor=#757575;fontStyle=2;" value="Dependencies from Phase 1 met any order within phase" vertex="1">
+          <mxGeometry height="22" width="105" x="33" y="193" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

@@ -1,0 +1,13 @@
+
+<rng:grammar xmlns:rng="http://relaxng.org/ns/structure/1.0"
+	xmlns:a="http://relaxng.org/ns/compatibility/annotations/1.0"
+	xmlns:sch="http://www.ascc.net/xml/schematron"
+	datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes">
+	
+	<rng:include href="BasicTypes.rng"/>
+	<rng:include href="BasicStructures.rng"/>
+	<rng:include href="EntityReferenceDefinition.rng"/>
+	<rng:include href="ConceptualFramework.rng"/>
+	<rng:include href="Metadata.rng"/>
+	<rng:include href="DocumentDefinition.rng"/>
+</rng:grammar>

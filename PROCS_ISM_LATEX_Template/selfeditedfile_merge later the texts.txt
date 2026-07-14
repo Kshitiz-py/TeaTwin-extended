@@ -1,0 +1,822 @@
+% ISM 2026 Paper
+% Title: Configuration, Not Code: A Human-in-the-Loop LLM Architecture for Mapping
+%        Heterogeneous Enterprise Systems to Canonical Digital Twin Models
+% Target track: Reshaping future smart manufacturing: convergence of Industrial Metaverse,
+%               Cyber-Physical Systems, and Digital Twins
+
+\documentclass[3p,times,procedia]{elsarticle}
+\flushbottom
+
+\usepackage{ecrc}
+\usepackage[bookmarks=false]{hyperref}
+    \hypersetup{colorlinks,
+      linkcolor=blue,
+      citecolor=blue,
+      urlcolor=blue}
+\usepackage{amssymb}
+\usepackage[figuresright]{rotating}
+\usepackage{graphicx}
+\usepackage{booktabs}
+
+\volume{00}
+\firstpage{1}
+\journalname{Procedia Computer Science}
+\runauth{K. Bohara}
+\jid{procs}
+
+\begin{document}
+\begin{frontmatter}
+
+\dochead{8th International Conference on Industry of the Future and Smart Manufacturing}
+
+\title{Configuration, Not Code: A Human-in-the-Loop LLM Architecture for Mapping Heterogeneous Enterprise Systems to Canonical Digital Twin Models}
+
+\author{Kshitiz Bohara}
+
+\address{Your Institution, Address, City and Postcode, Country}
+
+\begin{abstract}
+Manufacturing enterprises sit on decades of data locked in heterogeneous ERP and MES systems, yet building digital twins from this data today requires per-customer code, embedded consultants, and manual field mapping, excluding the SMEs who stand to gain the most. We present a human-in-the-loop architecture where an LLM reads raw enterprise API payloads, consults a curated catalog of target-schema field descriptions, and proposes field-level mappings as JSON configuration with calibrated confidence scores. A human reviews only the fields the model flags as uncertain, while high-confidence proposals are safe to auto-accept. A deterministic runtime engine consumes the configuration and assembles the digital twin with zero per-customer code. The architecture is vendor-agnostic: heterogeneous source systems map to any canonical information model (exemplified here by CMSD/ISO 22400). Across two LLM architectures, four API payload variants, and controlled RAG ablation, both models achieve 95--96\% aggregate mapping accuracy. The non-reasoning model matches the reasoning model within 1.4 percentage points while running 3$\times$ faster with lower token consumption. Extended statistical analysis ($n=20$, 640 runs) reveals that field ambiguity, predominantly in numeric fields within legacy payloads, is the fundamental bottleneck; target-side RAG provides zero statistically significant improvement (Mann--Whitney $U$, $p > 0.05$). The architecture, not the model, is the contribution.
+\end{abstract}
+
+\begin{keyword}
+digital twin ; large language model ; human-in-the-loop ; CMSD ; smart manufacturing ; enterprise integration ; configuration-driven architecture ; canonical information model
+\end{keyword}
+
+\end{frontmatter}
+
+% =============================================================================
+% 1. INTRODUCTION
+% =============================================================================
+\section{Introduction}
+\label{sec:intro}
+
+Consider a mid-sized CNC machining supplier seeking to adopt digital twin technology for its own operations: simulating production schedule changes, tracking overall equipment effectiveness, and optimizing resource allocation across its shop floor. The simulation software expects data conforming to a vendor-neutral standard such as CMSD (Core Manufacturing Simulation Data, ISO~22400). The supplier's data, however, is fractured across systems that were never designed to interoperate: static master data lives in an on-premise SAP ERP with German field names, while operational data sits in a legacy MES whose API returns opaque, undocumented field codes. Today, bridging this gap requires an embedded consultant who manually inspects each API response, maps every field to the target schema by hand, and hard-codes per-customer Python scripts. For the thousands of SMEs with limited IT staff and no in-house domain expertise, this cost is prohibitive, excluding them from digital twin adoption.
+
+This scenario is the norm. Decades of structured factory data are locked inside heterogeneous ERP, MES, and SCADA systems, each using its own naming conventions for the same manufacturing concepts. The manual mapping approach is brittle to API changes and carries a per-customer cost structure that makes digital twins viable only for large enterprises.
+
+Large Language Models offer a different path. An LLM can parse a raw API payload, understand a target schema expressed in plain language, and propose field-level mappings with self-assessed confidence scores. This inverts the architecture: instead of generating per-customer code, the LLM produces a JSON configuration that declaratively specifies every mapping and transformation. A human reviews only the proposals the model flags as uncertain. A deterministic runtime engine consumes the configuration and assembles the digital twin, with zero generated code. The mapping is a configuration artifact, not a software artifact.
+
+This paper presents the architecture, implementation, and empirical evaluation of a system that realizes this vision. Our contributions are threefold:
+
+\begin{itemize}
+\item \textbf{Architecture.} A configuration-driven, human-in-the-loop architecture where an LLM proposes field mappings as JSON at design time, a deterministic engine assembles the twin at runtime, and a vendor-neutral canonical information model serves as the integration hub for heterogeneous enterprise APIs.
+\item \textbf{Calibrated Human-in-the-Loop Workflow.} The LLM self-scores every mapping proposal, enabling targeted human review of only uncertain fields while high-confidence proposals are safe to auto-accept. Smart reanalysis re-evaluates only corrected fields.
+\item \textbf{Empirical Validation.} A controlled evaluation across two LLM architectures, four API payload variants, and controlled RAG conditions, demonstrating that a non-reasoning model matches reasoning-model accuracy at lower cost, and that numeric field ambiguity in legacy payloads is the fundamental bottleneck for automated schema mapping.
+\end{itemize}
+
+% =============================================================================
+% 2. RELATED WORK
+% =============================================================================
+\section{Related Work}
+\label{sec:related}
+
+% STRUCTURE — 4 clusters, no explicit subsections:
+%   [REF NEEDED: 3-4 citations per cluster]
+
+The automated generation of digital twins from enterprise data sources has been approached through hardcoded factory classes, rule-based mapping engines, and template-driven code generation [REF NEEDED]. These methods require a developer who understands both the source API structure and the target information model to write per-customer integration code. A new API version, a different ERP vendor, or an additional factory each force the integration to be rewritten. Several reference architectures for digital twin manufacturing systems have been proposed [REF NEEDED], but majority of them assume data is already available in the target format and do not address the upstream mapping problem.
+
+Schema mapping and ontology alignment have been studied extensively in the data integration community. Traditional approaches use rule-based matchers, dictionary-based string similarity measures, and heuristic structural matching across database schemas [REF NEEDED]. More recently, large language models have been applied to zero-shot and few-shot schema mapping tasks, demonstrating that LLMs can match fields across database schemas and knowledge graphs without task-specific training [REF NEEDED]. In parallel, human-in-the-loop methods have been explored for interactive schema matching and entity resolution, where machine proposals are refined through human feedback [REF NEEDED]. Our work sits at the intersection of these two lines: we combine LLM-based mapping proposals with a calibrated confidence framework that directs human attention exclusively to uncertain proposals, an approach we argue is the right balance for industrial settings where mapping correctness directly impacts production decisions.
+
+The CMSD standard (ISO~22400) defines a vendor-neutral information model for exchanging manufacturing simulation data across tools and organizations [REF NEEDED]. Existing implementations have focused on simulation tool interoperability and standardized data exchange formats [REF NEEDED]. To our knowledge, no prior work has deployed an LLM-driven field mapper that treats CMSD as the canonical hub in a multi-source enterprise integration, where both ERP and MES data are translated into CMSD through a single configuration-driven pipeline.
+
+Barriers to digital twin adoption for small and medium manufacturers are well documented, with integration cost and the scarcity of domain expertise identified as the primary obstacles [REF NEEDED]. Low-code and no-code platforms have been proposed to lower these barriers for industrial system integration [REF NEEDED], but these still require the user to manually define data transformations through visual interfaces. Our configuration-driven architecture reduces the human role from defining transformations to reviewing AI-generated proposals, a qualitative shift in the skill threshold required to produce a standards-compliant digital twin.
+
+% =============================================================================
+% 3. SYSTEM ARCHITECTURE
+% =============================================================================
+\section{System Architecture}
+\label{sec:architecture}
+
+\subsection{Architecture Overview}
+\label{sec:arch-overview}
+
+The system consists of five logical components, shown in Figure~\ref{fig:architecture}. Two source adapters simulate the heterogeneous enterprise systems the architecture is designed to bridge: a Mock SAP API serving master data (resources, bills of materials, orders, part types) with nested JSON structures, and a Mock MES API serving operational data (resource status, job execution, incidents) using incompatible field naming conventions. The AI Agent orchestrates the mapping proposal pipeline: a provider-agnostic LLM client, a RAG retriever backed by a vector store for semantic schema lookup, and a mapping engine that produces structured proposals with confidence scores. The CMSD Twin Service contains the runtime components: a MappingDrivenFactory that consumes JSON configuration and produces live CMSD model instances, a ChangeDetector that diffs successive document snapshots, and an EventBus that publishes changes via WebSocket to the dashboard. The Web Dashboard provides the guided mapping wizard and the live twin monitor. A shared configuration store decouples mapping authoring from execution: the agent writes confirmed mapping files, the twin service reads them at generation time.
+
+Three architectural decisions define the design. First, the LLM operates exclusively at design time: it proposes mappings when a human configures a new data source, but the runtime path (fetch APIs, extract fields, apply transformations, build instances) is pure deterministic code with no LLM in the execution path. Second, the chat model and embedding model are configured independently, allowing the embedding workload to run locally where enterprise data resides while the reasoning workload calls a cloud API. Third, the architecture is provider-agnostic: any OpenAI-compatible chat API and any embedding backend can be substituted by changing configuration, without modifying the mapping engine or the runtime factory.
+
+\begin{figure}[t]
+\centering
+% [Figure 1: Architecture diagram — 5 logical components with data flows]
+\caption{System architecture. The AI Agent proposes mappings at design time; the CMSD Twin Service executes them deterministically at runtime. Source adapters abstract enterprise system heterogeneity behind a uniform fetch interface.}
+\label{fig:architecture}
+\end{figure}
+
+\subsection{Mapping as Configuration}
+\label{sec:arch-config}
+
+The central idea of the architecture is that field mapping between enterprise APIs and a canonical information model is a configuration problem, not a code generation problem. Listing~\ref{lst:comparison} contrasts the two approaches. On the left, the traditional pattern: a developer hard-codes per-field extraction logic in Python, writing conditional branches for each customer and each API variant. This code is opaque to domain experts, brittle under API changes, and must be rewritten for every new data source. On the right, the approach this architecture implements: a JSON configuration file declaratively specifies the target entity, source endpoints, field-level mappings with dot-notation API paths, confidence scores, and transformation rules. A generic MappingDrivenFactory reads this configuration and produces typed CMSD instances at runtime, with no generated code in the execution path.
+% ISM 2026 Paper
+% Title: Configuration, Not Code: A Human-in-the-Loop LLM Architecture for Mapping
+%        Heterogeneous Enterprise Systems to Canonical Digital Twin Models
+% Target track: Reshaping future smart manufacturing: convergence of Industrial Metaverse,
+%               Cyber-Physical Systems, and Digital Twins
+
+\documentclass[3p,times,procedia]{elsarticle}
+\flushbottom
+
+\usepackage{ecrc}
+\usepackage[bookmarks=false]{hyperref}
+    \hypersetup{colorlinks,
+      linkcolor=blue,
+      citecolor=blue,
+      urlcolor=blue}
+\usepackage{amssymb}
+\usepackage[figuresright]{rotating}
+\usepackage{graphicx}
+\usepackage{booktabs}
+
+\volume{00}
+\firstpage{1}
+\journalname{Procedia Computer Science}
+\runauth{K. Bohara}
+\jid{procs}
+
+\begin{document}
+\begin{frontmatter}
+
+\dochead{8th International Conference on Industry of the Future and Smart Manufacturing}
+
+\title{Configuration, Not Code: A Human-in-the-Loop LLM Architecture for Mapping Heterogeneous Enterprise Systems to Canonical Digital Twin Models}
+
+\author{Kshitiz Bohara}
+
+\address{Your Institution, Address, City and Postcode, Country}
+
+\begin{abstract}
+Manufacturing enterprises sit on decades of data locked in heterogeneous ERP and MES systems, yet building digital twins from this data today requires per-customer code, embedded consultants, and manual field mapping, excluding the SMEs who stand to gain the most. We present a human-in-the-loop architecture where an LLM reads raw enterprise API payloads, consults a curated catalog of target-schema field descriptions, and proposes field-level mappings as JSON configuration with calibrated confidence scores. A human reviews only the fields the model flags as uncertain, while high-confidence proposals are safe to auto-accept. A deterministic runtime engine consumes the configuration and assembles the digital twin with zero per-customer code. The architecture is vendor-agnostic: heterogeneous source systems map to any canonical information model (exemplified here by CMSD/ISO 22400). Across two LLM architectures, four API payload variants, and controlled RAG ablation, both models achieve 95--96\% aggregate mapping accuracy. The non-reasoning model matches the reasoning model within 1.4 percentage points while running 3$\times$ faster with lower token consumption. Extended statistical analysis ($n=20$, 640 runs) reveals that field ambiguity, predominantly in numeric fields within legacy payloads, is the fundamental bottleneck; target-side RAG provides zero statistically significant improvement (Mann--Whitney $U$, $p > 0.05$). The architecture, not the model, is the contribution.
+\end{abstract}
+
+\begin{keyword}
+digital twin ; large language model ; human-in-the-loop ; CMSD ; smart manufacturing ; enterprise integration ; configuration-driven architecture ; canonical information model
+\end{keyword}
+
+\end{frontmatter}
+
+% =============================================================================
+% 1. INTRODUCTION
+% =============================================================================
+\section{Introduction}
+\label{sec:intro}
+
+Consider a mid-sized CNC machining supplier seeking to adopt digital twin technology for its own operations for simulating production schedule changes, tracking overall equipment effectiveness, and optimizing resource allocation across its shop floor. The simulation software expects data conforming to neutral formats, however, these are fractured across systems that were never designed to interoperate: static master data lives in an on-premise ERP system, while operational data sits in MES system whose API may return opaque, undocumented field codes. Today, bridging this gap requires a dedicated resource who manually inspects each API response, maps every field to the target schema by hand, and hard-codes per-customer scripts. For the thousands of SMEs with limited staffs and no in-house domain expertise, this cost is prohibitive, excluding them from digital twin adoption.
+
+This scenario is the norm. Decades of structured factory data are locked inside heterogeneous ERP, MES, and SCADA systems, each using its own naming conventions for the same manufacturing concepts. The manual mapping approach is brittle to API changes and carries a per-customer cost structure that makes digital twins viable only for large enterprises.
+
+Large Language Models, however offer a different path. An LLM can parse a raw API payload, understand a target schema expressed in plain language, and propose field-level mappings with self-assessed confidence scores. This inverts the architecture: instead of generating per-customer code, the LLM produces a JSON configuration that declaratively specifies every mapping and transformation. A human reviews only the proposals the model flags as uncertain. A deterministic runtime engine then consumes the configuration and assembles the digital twin, with zero generated code. The mapping becomes a configuration artifact, not a software artifact.
+
+This paper presents the architecture, implementation, and empirical evaluation of a system that realizes this vision. Our contributions are threefold:
+
+\begin{itemize}
+\item \textbf{Architecture.} A configuration-driven, human-in-the-loop architecture where an LLM proposes field mappings as JSON at design time, a deterministic engine assembles the twin at runtime, and a vendor-neutral canonical information model serves as the integration hub for heterogeneous enterprise APIs.
+\item \textbf{Calibrated Human-in-the-Loop Workflow.} The LLM self-scores every mapping proposal, enabling targeted human review of only uncertain fields while high-confidence proposals are safe to auto-accept. Smart reanalysis re-evaluates only corrected fields.
+\item \textbf{Empirical Validation.} A controlled evaluation across two LLM architectures, four API payload variants, and controlled RAG conditions, demonstrating that a non-reasoning model matches reasoning-model accuracy at lower cost, and that numeric field ambiguity in legacy payloads is the fundamental bottleneck for automated schema mapping.
+\end{itemize}
+
+% =============================================================================
+% 2. RELATED WORK
+% =============================================================================
+\section{Related Work}
+\label{sec:related}
+
+% STRUCTURE — 4 clusters, no explicit subsections:
+%   [REF NEEDED: 3-4 citations per cluster]
+
+The automated generation of digital twins from enterprise data sources has been approached through hardcoded factory classes, rule-based mapping engines, and template-driven code generation [REF NEEDED]. These methods require a developer who understands both the source API structure and the target information model to write per-customer integration code. A new API version, a different ERP vendor, or an additional factory each force the integration to be rewritten. Several reference architectures for digital twin manufacturing systems have been proposed [REF NEEDED], but majority of them assume data is already available in the target format and do not address the upstream mapping problem.
+
+Schema mapping and ontology alignment have been studied extensively in the data integration community. Traditional approaches use rule-based matchers, dictionary-based string similarity measures, and heuristic structural matching across database schemas [REF NEEDED]. More recently, large language models have been applied to zero-shot and few-shot schema mapping tasks, demonstrating that LLMs can match fields across database schemas and knowledge graphs without task-specific training [REF NEEDED]. In parallel, human-in-the-loop methods have been explored for interactive schema matching and entity resolution, where machine proposals are refined through human feedback [REF NEEDED]. Our work sits at the intersection of these two lines: we combine LLM-based mapping proposals with a calibrated confidence framework that directs human attention exclusively to uncertain proposals, an approach we argue is the right balance for industrial settings where mapping correctness directly impacts production decisions.
+
+The CMSD standard (ISO~22400) defines a vendor-neutral information model for exchanging manufacturing simulation data across tools and organizations [REF NEEDED]. Existing implementations have focused on simulation tool interoperability and standardized data exchange formats [REF NEEDED]. To our knowledge, no prior work has deployed an LLM-driven field mapper that treats CMSD as the canonical hub in a multi-source enterprise integration, where both ERP and MES data are translated into CMSD through a single configuration-driven pipeline.
+
+Barriers to digital twin adoption for small and medium manufacturers are well documented, with integration cost and the scarcity of domain expertise identified as the primary obstacles [REF NEEDED]. Low-code and no-code platforms have been proposed to lower these barriers for industrial system integration [REF NEEDED], but these still require the user to manually define data transformations through visual interfaces. Our configuration-driven architecture reduces the human role from defining transformations to reviewing AI-generated proposals, a qualitative shift in the skill threshold required to produce a standards-compliant digital twin.
+
+% =============================================================================
+% 3. SYSTEM ARCHITECTURE
+% =============================================================================
+\section{System Architecture}
+\label{sec:architecture}
+
+\subsection{Architecture Overview}
+\label{sec:arch-overview}
+
+The system consists of five logical components, shown in Figure~\ref{fig:architecture}. Two source adapters simulate the heterogeneous enterprise systems the architecture is designed to bridge: a SAP API serving master data (resources, bills of materials, orders, part types) with nested JSON structures, and a MES API serving operational data (resource status, job execution, incidents) using incompatible field naming conventions. The AI Agent orchestrates the mapping proposal pipeline: a provider-agnostic LLM client, a RAG retriever backed by a vector store for semantic schema lookup, and a mapping engine that produces structured proposals with confidence scores. The CMSD Twin Service contains the runtime components: a MappingDrivenFactory that consumes JSON configuration and produces live CMSD model instances, a ChangeDetector that diffs successive document snapshots, and an EventBus that publishes changes via WebSocket to the dashboard. The Web Dashboard provides the guided mapping wizard and the live twin monitor. A shared configuration store decouples mapping authoring from execution: the agent writes confirmed mapping files, the twin service reads them at generation time.
+
+Two architectural decisions define the design. First, the LLM operates exclusively at design time: it proposes mappings when a human configures a new data source, but the runtime path (fetch APIs, extract fields, apply transformations, build instances) is pure deterministic code with no LLM in the execution path. Second, the chat and embedding providers are independently configured. Both can target local or cloud backends as deployment constraints require. Our evaluation uses a local embedding model alongside a cloud-hosted reasoning model from openly available weights, validating a configuration that an SME can replicate on-premises for full data sovereignty when required.
+
+\begin{figure}[t]
+\centering
+% [Figure 1: Architecture diagram — 5 logical components with data flows]
+\caption{System architecture. The AI Agent proposes mappings at design time; the CMSD Twin Service executes them deterministically at runtime. Source adapters abstract enterprise system heterogeneity behind a uniform fetch interface.}
+\label{fig:architecture}
+\end{figure}
+
+\subsection{Mapping as Configuration}
+\label{sec:arch-config}
+
+The central idea of the architecture is that field mapping between enterprise APIs and a canonical information model is a configuration problem, not a code generation problem. Listing~\ref{lst:comparison} contrasts the two approaches. On the left, the traditional pattern: a developer hard-codes per-field extraction logic, writing conditional branches for each customer and each API variant. This code is opaque to domain experts, brittle under API changes, and must be rewritten for every new data source. On the right, the approach this architecture implements: a JSON configuration file declaratively specifies the target entity, source endpoints, field-level mappings with dot-notation API paths, confidence scores, and transformation rules. A generic MappingDrivenFactory reads this configuration and produces typed CMSD instances at runtime.
+
+The JSON configuration becomes the single source of truth for every mapping decision. It is human-readable, diffable, version-controllable, and language-agnostic. A factory manager can review which API fields map to which CMSD attributes without reading a line of Python. A consultant can version a mapping file alongside the factory's configuration repository. A new customer with different API structures requires only a new JSON file; the engine, the dashboard, and the deployment stack remain unchanged.
+
+\subsection{The Canonical Information Model}
+\label{sec:arch-hub}
+
+Enterprise source systems speak different dialects for the same underlying manufacturing concepts. A resource's uptime percentage might appear as \texttt{uptime\_pct} in SAP, \texttt{AVAIL\_PCT} in one MES, and \texttt{availability\_percent} in another. The architecture resolves this by designating a vendor-neutral canonical information model as the integration hub. We use CMSD (Core Manufacturing Simulation Data, ISO~22400) as the reference implementation, but the architecture is schema-agnostic: the same engine, configuration format, and workflow apply to any target model, including AutomationML (AML), the Asset Administration Shell (AAS), or a proprietary schema. The AI layer translates each source dialect into the canonical vocabulary. The twin only knows the canonical model, so source heterogeneity is fully abstracted. Swapping the target schema requires only a different field catalog in the RAG store and a different set of typed model implementations in the factory; the mapping pipeline and runtime engine remain unchanged.
+
+\subsection{Multi-Endpoint Data Fusion}
+\label{sec:arch-fusion}
+
+A single digital twin entity often requires data from multiple independent APIs. A Resource entity, for instance, draws its static attributes from SAP (name, capacity, type, location), its live operational state from one MES endpoint (busy, idle, offline), and its reliability metrics from another (MTTR, MTBF, failure count). The architecture performs concurrent fetch across all source endpoints, with each endpoint succeeding or failing independently. The twin is assembled from whichever data arrives; a failed endpoint does not block the others. Every mapped field records its source attribution (which API, which endpoint, which join key), enabling traceability from CMSD instance back to the originating system. Cross-endpoint instance matching uses a declared join key (such as \texttt{resource\_id}) to merge data from multiple APIs into a single CMSD entity.
+
+\subsection{DAG-Driven Entity Construction}
+\label{sec:arch-dag}
+
+CMSD entities reference each other. An Order references a PartType through its order lines. A Job references a Resource. A Bill of Materials references Parts. Building these entities in the wrong order breaks referential integrity: an Order that references a PartType identifier that has not yet been generated is structurally invalid.
+
+A MappingRegistry constructs a dependency Directed Acyclic Graph (DAG) from the relationships declared in each mapping configuration, shown in Figure~\ref{fig:dag}. Topological sort determines the correct build order (ResourceClasses, then Resources, then PartTypes, then Orders, then Jobs), ensuring that referenced entities exist before they are referenced. Before any generation begins, a pre-flight validation pass checks three conditions: dependency completeness (every referenced entity type has a selected mapping), field coverage (every field on every selected mapping has been reviewed and approved), and API reachability (each source endpoint responds to a health check). If validation passes, the system guarantees a structurally sound digital twin.
+
+The LLM assists entity relation discovery during the mapping phase. When it detects a field like \texttt{part\_type\_id} in an Order API payload, it proposes a relation to the PartType entity with the corresponding match key. The human operator accepts, edits, or rejects each proposed relation. The DAG is built from approved relations, not inferred at runtime.
+
+\begin{figure}[t]
+\centering
+% [Figure 2: DAG dependency graph — entities as nodes, directed edges as dependencies, topological order annotated]
+\caption{Entity dependency DAG. Topological sort determines the correct build order, ensuring referential integrity across the assembled digital twin.}
+\label{fig:dag}
+\end{figure}
+
+\subsection{Human-in-the-Loop with Calibrated Confidence}
+\label{sec:arch-hitl}
+
+The guided mapping workflow proceeds through six phases: Connect (select source systems and enter endpoint paths), Approve (review fetched payloads, exclude failed endpoints), Map (LLM proposes field-level mappings with RAG context), Review (human inspects proposals flagged as uncertain), Transform (human selects and previews conversion rules), and Generate (configuration is saved and the twin is assembled). Each phase constrains the next; the wizard enforces the workflow so the user does not need to understand it in advance.
+
+The LLM self-scores every mapping proposal as high, medium, or low confidence. High-confidence proposals are collapsed by default in the review interface and are safe to auto-accept. Medium and low-confidence proposals are surfaced for mandatory human inspection. When a human corrects a flagged field, the system performs smart reanalysis: it re-evaluates only the corrected field against the updated constraint, leaving all previously accepted mappings intact. This targets human effort exclusively where the model is uncertain and prevents a single correction from triggering a full re-mapping.
+
+For the SME operator, this workflow means that CMSD expertise is not a prerequisite. The AI makes the first proposal; the human reviews only what the model flags. Review effort scales with API quality, not entity complexity. Expert corrections are captured in persistent configuration files and compound across factories.
+
+\subsection{Continuous Synchronization}
+\label{sec:arch-sync}
+
+The architecture treats the digital twin as a living representation of the factory, not a one-time export. The synchronization cycle follows five stages: poll (on a configurable interval, or triggered manually), fetch (concurrent API calls to all source endpoints), build (MappingDrivenFactory assembles a new CMSD document), diff (ChangeDetector compares the new document against the previous snapshot), and push (EventBus publishes only the changed fields to the dashboard via WebSocket). The default mode is manual refresh; configurable auto-polling can be enabled for continuous operation.
+
+\subsection{Design Rationale for AI-Enabled Manufacturing}
+\label{sec:arch-rationale}
+
+Three manufacturing-specific concerns motivated key architectural choices.
+
+\textit{Why deterministic runtime matters.} A shop floor cannot tolerate LLM hallucinations or API latency in its production data path. The LLM operates at design time, proposing mappings during initial configuration and during periodic reconfiguration when APIs change. The production path (fetch APIs, extract fields, apply transforms, build instances, diff, publish) is pure deterministic code. This eliminates unpredictability, variable latency, and per-call cost from the critical runtime.
+
+\textit{Why JSON over code generation.} A JSON mapping file can be read, reviewed, and signed off by a factory manager who understands manufacturing concepts but not programming. The configuration serves as both executable specification and living documentation of every mapping decision. Version-controlling a JSON file alongside the factory's configuration repository gives the mapping the same audit trail as any other operational asset.
+
+\textit{Why open-source models running locally.} Manufacturing data (resource configurations, production orders, operational metrics) is commercially sensitive and, in regulated industries, subject to data residency requirements. The architecture runs embedding models locally, keeping enterprise data on-premises throughout the RAG indexing and retrieval pipeline. The chat model calls a cloud API for its reasoning workload, but the data that describes the factory never leaves the deployment environment.
+
+% =============================================================================
+% 4. AI-POWERED MAPPING PIPELINE
+% =============================================================================
+\section{AI-Powered Mapping Pipeline}
+\label{sec:pipeline}
+
+% ---------------------------------------------------------------------------
+% 4.1 RAG with Curated CMSD Content
+% ---------------------------------------------------------------------------
+\subsection{RAG with Curated Content}
+\label{sec:pipeline-rag}
+
+% RAG architecture:
+%   ChromaDB + Ollama (qwen3-embedding:4b, 2560-dim)
+%   2 collections: CMSD field catalog + ASMG data requirements
+%   Retrieval: query embedding → cosine similarity → top-k → ~2500 chars context
+%
+% Catalog format: Entity → Field → Type → Description in plain English
+%   Deliberately NOT source code — no type annotations, Optional wrappers, etc.
+%
+% Design decision — target-side only RAG:
+%   Target schema (CMSD) is fixed. Source side varies per factory — some documented,
+%   many legacy systems have none. Embedding source docs = fragile to doc quality.
+%   We embed only target catalog, test worst case (no source context). Section 5
+%   quantifies what this design choice costs.
+%
+% What catalog describes vs what it doesn't (forward ref to Sec 5):
+%   Catalog = CMSD target descriptions only. Clean APIs: LLM matches both sides.
+%   Legacy payloads: catalog tells LLM what CMSD availability means, but NOT what
+%   FLD007 means in the source. LLM must infer from values alone.
+
+% ---------------------------------------------------------------------------
+% 4.2 Provider-Agnostic Multi-Model Support
+% ---------------------------------------------------------------------------
+\subsection{Provider-Agnostic Multi-Model Support}
+\label{sec:pipeline-models}
+
+% Single LLMClient abstraction — any OpenAI-compatible API
+% Chat (cloud) and embedding (local) configured independently
+% Tested: deepseek-v4-flash (non-reasoning), deepseek-v4-pro (reasoning, thinking enabled)
+% Switch models by changing env var — architecture outlives any specific LLM API
+
+% ---------------------------------------------------------------------------
+% 4.3 Transformation Presets
+% ---------------------------------------------------------------------------
+\subsection{Transformation Presets}
+\label{sec:pipeline-transforms}
+
+% 9 deterministic transformation types (inline in Sec 3.2 JSON listing, not enumerated)
+% LLM proposes transform + params; human verifies via live preview
+% Engine executes deterministically — pure functions, no LLM
+% Transforms validated against target schema at save time
+% Key: 9 primitives cover 90%+ real-world conversions, zero Python generated
+
+% =============================================================================
+% 5. EVALUATION
+% =============================================================================
+\section{Evaluation}
+\label{sec:evaluation}
+
+% ---------------------------------------------------------------------------
+% 5.1 Experimental Setup
+% ---------------------------------------------------------------------------
+\subsection{Experimental Setup}
+\label{sec:eval-setup}
+
+% Test matrix:
+%   4 API payload variants: clean, legacy (FLD codes), german, deep (3-level nested)
+%   4 CMSD entities: Resource (20 fields), ResourceClass (6), Order (4), PartType (5)
+%   2 models: deepseek-v4-flash (non-reasoning), deepseek-v4-pro (reasoning)
+%   2 RAG modes: no-RAG, catalog RAG (~2500 chars)
+%   n=5 per config; extended n=20 probe for Flash (640 total runs)
+%   Ground truth: manually verified field-by-field, reproducible via paper_evaluation_v2.py
+%
+% Metrics: accuracy (% ground truth correct), string acc, numeric acc,
+%   prompt/completion/total tokens, latency, RAG context length, confidence distribution.
+%
+% Two-phase: Phase I (n=5) baseline both models. Phase II (n=20, 640 runs)
+%   extended probe on Flash, Mann-Whitney U + Levene's test for RAG significance.
+
+% ---------------------------------------------------------------------------
+% 5.2 Accuracy Results
+% ---------------------------------------------------------------------------
+\subsection{Accuracy Results}
+\label{sec:eval-accuracy}
+
+% Table 1: Aggregate Accuracy by Model and RAG Mode (n=5)
+% | Model | No-RAG | Catalog RAG | String Acc (RAG) | Numeric Acc (RAG) |
+% | Flash | 95.8%  | 95.0%       | 99.3%            | 93.6%             |
+% | Pro   | 95.8%  | 96.4%       | 100.0%           | 95.2%             |
+%
+% Key findings: Flash matches Pro within 1.4pp at 3x speed;
+%   Pro + RAG = perfect string accuracy (100.0%); modest RAG delta masks asymmetry.
+%
+% Per-entity findings (prose, no table):
+%   Order: 100% across all 16 configs — solved.
+%   ResourceClass + PartType: 96-100%, minor dips on German.
+%   Resource: the bottleneck. 20 fields (7 string, 7 numeric, 6 null-prone).
+%     Legacy: ~45% regardless of model/RAG. Drives aggregate down from ~100% ceiling.
+%
+% Table 2: Entity Field Type Profiles
+% | Entity | String | Numeric | Null-prone | Total | Difficulty |
+% | Resource | 7 | 7 | 6 | 20 | Hard |
+% | ResourceClass | 5 | 1 | 0 | 6 | Moderate |
+% | Order | 4 | 0 | 0 | 4 | Easy |
+% | PartType | 4 | 1 | 0 | 5 | Easy |
+%
+% Difficulty = function of numeric count + null-proneness, not total fields.
+
+% ---------------------------------------------------------------------------
+% 5.3 Token Consumption and Reasoning Overhead
+% ---------------------------------------------------------------------------
+\subsection{Token Consumption and Reasoning Overhead}
+\label{sec:eval-tokens}
+
+% Table 3: Token Comparison by Model and RAG Mode
+% | Model | Metric | No-RAG | Catalog RAG | Delta |
+% | Flash | Prompt | ~1,310 | ~1,774 | +464 (35%) |
+% | Flash | Completion | ~2,183 | ~2,362 | +179 (8%) |
+% | Flash | Total | ~3,493 | ~4,136 | +643 (18%) |
+% | Pro | Prompt | ~1,310 | ~1,774 | +464 (35%) |
+% | Pro | Completion | ~2,407 | ~2,609 | +202 (8%) |
+% | Pro | Total | ~3,717 | ~4,383 | +666 (18%) |
+%
+% Takeaways: input determinism (identical prompt tokens), Pro ~10% more completion
+%   (deeper CoT), RAG only +8% completion (cost is in input), Flash 2-3x faster.
+
+% ---------------------------------------------------------------------------
+% 5.4 Statistical Invariance of RAG — When Context Cannot Help
+% ---------------------------------------------------------------------------
+\subsection{Statistical Invariance of RAG}
+\label{sec:eval-statistical}
+
+% Table 4: RAG vs No-RAG — Extended Statistical Analysis (Flash, n=20, 320 per mode)
+% | Entity | Variant | RAG Median [Min, Max] | no-RAG Median [Min, Max] | p-value |
+% | Resource | legacy | 45.0% [30.0, 65.0] | 45.0% [35.0, 60.0] | 0.657 |
+% | Resource | clean | 100.0% [65.0, 100.0] | 100.0% [65.0, 100.0] | 0.986 |
+% | Resource | german | 100.0% [70.0, 100.0] | 100.0% [70.0, 100.0] | 0.252 |
+% | Resource | deep | 100.0% [95.0, 100.0] | 100.0% [95.0, 100.0] | 0.225 |
+% | PartType | clean/german | 100.0% [80.0, 100.0] | 100.0% [80.0, 100.0] | >0.654 |
+% | ResourceClass | legacy/german | 100.0% [83.3, 100.0] | 100.0% [83.3, 100.0] | >0.302 |
+% | Order | all | 100.0% [100.0, 100.0] | 100.0% [100.0, 100.0] | 1.000 |
+%
+% All p > 0.05 — RAG zero significant improvement. Levene's p = 0.9631 (no variance stabilization).
+% Resource legacy catastrophic: median 45%, range 30-65%. Order ideal: deterministic 100%.
+%
+% Why RAG fails legacy numerics (aleatoric vs epistemic):
+%   String values carry identity cues ("CNC Machine 3000"). Numeric values (95.0) carry none.
+%   FLD007: 95.0 with 7 numeric fields all 0-100 range → catalog narrows CMSD range
+%   (availability 0.0-1.0) but cannot disambiguate. Aleatoric ambiguity, not epistemic.
+%   Cross-model: Pro = 46-50% on same bottleneck, +60% timeout from reasoning overhead.
+%   Neither retrieval quality nor model scaling compensates.
+
+% ---------------------------------------------------------------------------
+% 5.5 Confidence Calibration
+% ---------------------------------------------------------------------------
+\subsection{Confidence Calibration}
+\label{sec:eval-confidence}
+
+% (Prose, no table)
+% High confidence: 95%+ accuracy — system correctly identifies strong proposals
+% Medium/low: incorrect consistently flagged — system knows when guessing
+% Calibration enables targeted review; no false certainty on hard cases (legacy numerics)
+
+% =============================================================================
+% 6. DISCUSSION
+% =============================================================================
+\section{Discussion}
+\label{sec:discussion}
+
+% When the system works:
+%   - Clean APIs on well-typed entities: 100% accuracy, either model, with/without RAG
+%   - Deeply nested JSON: 100% — LLM navigates multi-level nesting
+%   - Non-English field names: 96-100%
+%   - String-only entities on legacy codes (Order): 100% even without RAG
+%
+% When it struggles:
+%   - Numeric ambiguity = fundamental bottleneck — values carry no identity signal
+%   - Resource legacy: 41-50% regardless of model/RAG — 7 numeric, opaque codes, 0-100 range
+%   - RAG cannot resolve: catalog describes targets, not FLD007 in source
+%   - Null-valued fields compound: 6 of Resource's 20 fields can be null
+%
+% Practical implications for SMEs (touchpoint 3):
+%   - Connect APIs, review flagged, generate twin — no CMSD expertise
+%   - Effort proportional to API quality, not entity complexity
+%   - Config persistent — corrections captured once, reusable
+%   - ~$0.01 per full factory model (Flash, no RAG)
+%   - System runs without RAG at 95.8% — simpler deployment for modern APIs
+%
+% Architecture as durable contribution:
+%   - JSON as AI-engine interface decouples proposal from execution
+%   - Deterministic runtime = production safety regardless of LLM
+%   - Graceful degradation = system works when dependencies fail
+%   - Provider-agnostic design outlives any specific LLM API
+
+% =============================================================================
+% 7. CONCLUSION
+% =============================================================================
+\section{Conclusion}
+\label{sec:conclusion}
+
+% Summary:
+%   Human-in-the-loop architecture for LLM-driven DT assembly from heterogeneous APIs.
+%   Core: field mapping as configuration, not code generation. LLM proposes JSON at
+%   design time; deterministic engine at runtime. Vendor-neutral canonical model.
+%
+% Key findings:
+%   - 95-96% aggregate accuracy across both models
+%   - Non-reasoning = reasoning within 1.4pp at 3x lower latency and tokens
+%   - Numeric ambiguity in legacy payloads = fundamental bottleneck
+%   - Target-side RAG = zero significant improvement (Mann-Whitney U, p > 0.05)
+%   - 3 of 4 entities 96-100%; Resource sole bottleneck
+%
+% Future work:
+%   - Graph-native DT instances with built-in reasoning: automatic relation propagation,
+%     blast-radius analysis, schema-change cascade management — extending from instance
+%     assembly to instance lifecycle management
+%   - Production deployment with live SAP/MES connectors (OData, RFC, SQL)
+%   - Controlled user study with manufacturing SMEs (time-to-twin, review burden)
+%
+% Broader significance:
+%   Thoughtful architecture — not just model capability — is key to AI in manufacturing.
+%   LLM = flexibility; deterministic engine = reliability; JSON config = bridge.
+%   Path to industrial-grade DTs for SMEs previously closed. Architecture embodies
+%   convergence the Industrial Metaverse track calls for.
+
+% =============================================================================
+% ACKNOWLEDGEMENTS
+% =============================================================================
+\section*{Acknowledgements}
+% TODO
+
+% =============================================================================
+% REFERENCES
+% =============================================================================
+\begin{thebibliography}{}
+
+% [REF NEEDED: ~20 citations across 4 clusters]
+% Cluster 2.1: Digital Twin Automation (3-4 refs)
+% Cluster 2.2: AI-Assisted Data Integration (3-4 refs)
+% Cluster 2.3: CMSD and ISO 22400 in Practice (3-4 refs)
+% Cluster 2.4: Smart Manufacturing & SME Digitalization (3-4 refs)
+% Additional: LLM confidence calibration, RAG surveys, ISO 22400 spec
+
+\end{thebibliography}
+
+\end{document}
+
+The JSON configuration is the single source of truth for every mapping decision. It is human-readable, diffable, version-controllable, and language-agnostic. A factory manager can review which API fields map to which CMSD attributes without reading a line of Python. A consultant can version a mapping file alongside the factory's configuration repository. A new customer with different API structures requires only a new JSON file; the engine, the dashboard, and the deployment stack remain unchanged.
+
+\subsection{The Canonical Information Model}
+\label{sec:arch-hub}
+
+Enterprise source systems speak different dialects for the same underlying manufacturing concepts. A resource's uptime percentage might appear as \texttt{uptime\_pct} in SAP, \texttt{AVAIL\_PCT} in one MES, and \texttt{availability\_percent} in another. The architecture resolves this by designating a vendor-neutral canonical information model as the integration hub. We use CMSD (Core Manufacturing Simulation Data, ISO~22400) as the reference implementation, but the architecture is schema-agnostic: the same engine, configuration format, and workflow apply to any target model, including AutomationML (AML), the Asset Administration Shell (AAS), or a proprietary schema. The AI layer translates each source dialect into the canonical vocabulary. The twin only knows the canonical model, so source heterogeneity is fully abstracted. Swapping the target schema requires only a different field catalog in the RAG store and a different set of typed model implementations in the factory; the mapping pipeline and runtime engine remain unchanged.
+
+\subsection{Multi-Endpoint Data Fusion}
+\label{sec:arch-fusion}
+
+A single digital twin entity often requires data from multiple independent APIs. A Resource entity, for instance, draws its static attributes from SAP (name, capacity, type, location), its live operational state from one MES endpoint (busy, idle, offline), and its reliability metrics from another (MTTR, MTBF, failure count). The architecture performs concurrent fetch across all source endpoints, with each endpoint succeeding or failing independently. The twin is assembled from whichever data arrives; a failed endpoint does not block the others. Every mapped field records its source attribution (which API, which endpoint, which join key), enabling traceability from CMSD instance back to the originating system. Cross-endpoint instance matching uses a declared join key (such as \texttt{resource\_id}) to merge data from multiple APIs into a single CMSD entity.
+
+\subsection{DAG-Driven Entity Construction}
+\label{sec:arch-dag}
+
+CMSD entities reference each other. An Order references a PartType through its order lines. A Job references a Resource. A Bill of Materials references Parts. Building these entities in the wrong order breaks referential integrity: an Order that references a PartType identifier that has not yet been generated is structurally invalid.
+
+A MappingRegistry constructs a dependency Directed Acyclic Graph (DAG) from the relationships declared in each mapping configuration, shown in Figure~\ref{fig:dag}. Topological sort determines the correct build order (ResourceClasses, then Resources, then PartTypes, then Orders, then Jobs), ensuring that referenced entities exist before they are referenced. Before any generation begins, a pre-flight validation pass checks three conditions: dependency completeness (every referenced entity type has a selected mapping), field coverage (every field on every selected mapping has been reviewed and approved), and API reachability (each source endpoint responds to a health check). If validation passes, the system guarantees a structurally sound digital twin.
+
+The LLM assists entity relation discovery during the mapping phase. When it detects a field like \texttt{part\_type\_id} in an Order API payload, it proposes a relation to the PartType entity with the corresponding match key. The human operator accepts, edits, or rejects each proposed relation. The DAG is built from approved relations, not inferred at runtime.
+
+\begin{figure}[t]
+\centering
+% [Figure 2: DAG dependency graph — entities as nodes, directed edges as dependencies, topological order annotated]
+\caption{Entity dependency DAG. Topological sort determines the correct build order, ensuring referential integrity across the assembled digital twin.}
+\label{fig:dag}
+\end{figure}
+
+\subsection{Human-in-the-Loop with Calibrated Confidence}
+\label{sec:arch-hitl}
+
+The guided mapping workflow proceeds through six phases: Connect (select source systems and enter endpoint paths), Approve (review fetched payloads, exclude failed endpoints), Map (LLM proposes field-level mappings with RAG context), Review (human inspects proposals flagged as uncertain), Transform (human selects and previews conversion rules), and Generate (configuration is saved and the twin is assembled). Each phase constrains the next; the wizard enforces the workflow so the user does not need to understand it in advance.
+
+The LLM self-scores every mapping proposal as high, medium, or low confidence. High-confidence proposals are collapsed by default in the review interface and are safe to auto-accept. Medium and low-confidence proposals are surfaced for mandatory human inspection. When a human corrects a flagged field, the system performs smart reanalysis: it re-evaluates only the corrected field against the updated constraint, leaving all previously accepted mappings intact. This targets human effort exclusively where the model is uncertain and prevents a single correction from triggering a full re-mapping.
+
+For the SME operator, this workflow means that CMSD expertise is not a prerequisite. The AI makes the first proposal; the human reviews only what the model flags. Review effort scales with API quality, not entity complexity. Expert corrections are captured in persistent configuration files and compound across factories (touchpoint 2 of 3).
+
+\subsection{Continuous Synchronization}
+\label{sec:arch-sync}
+
+The architecture treats the digital twin as a living representation of the factory, not a one-time export. The synchronization cycle follows five stages: poll (on a configurable interval, or triggered manually), fetch (concurrent API calls to all source endpoints), build (MappingDrivenFactory assembles a new CMSD document), diff (ChangeDetector compares the new document against the previous snapshot), and push (EventBus publishes only the changed fields to the dashboard via WebSocket). The default mode is manual refresh; configurable auto-polling can be enabled for continuous operation.
+
+Every CMSD entity instance carries connection metadata: the mapping configuration that produced it, the source API URL, the join key field and value used to identify it, and the timestamp of its last successful fetch. The dashboard renders this as a connection indicator on each entity card: green for live data fetched within the last 60 seconds, amber for stale data older than five minutes, and gray for static entities produced by the hardcoded fallback factory.
+
+The system degrades gracefully at every layer. If a source API is unreachable after retries, the previous instances for that entity type are preserved and a stale indicator is shown. If a field path specified in the mapping is absent from the live API response, the field is set to \texttt{None} with a warning logged, and construction continues. If the LLM is unavailable, an empty mapping template is returned for full manual editing. If an entity type has no confirmed mapping, the hardcoded CMSD factory serves as a fallback. If a multi-endpoint fetch partially fails, the twin is assembled from the successful endpoints only. The architecture never fails catastrophically because of an external dependency.
+
+\subsection{Design Rationale for AI-Enabled Manufacturing}
+\label{sec:arch-rationale}
+
+Three manufacturing-specific concerns motivated key architectural choices that would not be obvious in a generic SaaS integration context.
+
+\textit{Why deterministic runtime matters.} A shop floor cannot tolerate LLM hallucinations or API latency in its production data path. The LLM operates at design time, proposing mappings during initial configuration and during periodic reconfiguration when APIs change. The production path (fetch APIs, extract fields, apply transforms, build instances, diff, publish) is pure deterministic code. This eliminates unpredictability, variable latency, and per-call cost from the critical runtime.
+
+\textit{Why JSON over code generation.} A JSON mapping file can be read, reviewed, and signed off by a factory manager who understands manufacturing concepts but not Python. Generated Python code cannot. The configuration serves as both executable specification and living documentation of every mapping decision. Version-controlling a JSON file alongside the factory's configuration repository gives the mapping the same audit trail as any other operational asset.
+
+\textit{Why open-source models running locally.} Manufacturing data (resource configurations, production orders, operational metrics) is commercially sensitive and, in regulated industries, subject to data residency requirements. The architecture runs embedding models locally, keeping enterprise data on-premises throughout the RAG indexing and retrieval pipeline. The chat model calls a cloud API for its reasoning workload, but the data that describes the factory never leaves the deployment environment.
+
+% =============================================================================
+% 4. AI-POWERED MAPPING PIPELINE
+% =============================================================================
+\section{AI-Powered Mapping Pipeline}
+\label{sec:pipeline}
+
+% ---------------------------------------------------------------------------
+% 4.1 RAG with Curated CMSD Content
+% ---------------------------------------------------------------------------
+\subsection{RAG with Curated Content}
+\label{sec:pipeline-rag}
+
+% RAG architecture:
+%   ChromaDB + Ollama (qwen3-embedding:4b, 2560-dim)
+%   2 collections: CMSD field catalog + ASMG data requirements
+%   Retrieval: query embedding → cosine similarity → top-k → ~2500 chars context
+%
+% Catalog format: Entity → Field → Type → Description in plain English
+%   Deliberately NOT source code — no type annotations, Optional wrappers, etc.
+%
+% Design decision — target-side only RAG:
+%   Target schema (CMSD) is fixed. Source side varies per factory — some documented,
+%   many legacy systems have none. Embedding source docs = fragile to doc quality.
+%   We embed only target catalog, test worst case (no source context). Section 5
+%   quantifies what this design choice costs.
+%
+% What catalog describes vs what it doesn't (forward ref to Sec 5):
+%   Catalog = CMSD target descriptions only. Clean APIs: LLM matches both sides.
+%   Legacy payloads: catalog tells LLM what CMSD availability means, but NOT what
+%   FLD007 means in the source. LLM must infer from values alone.
+
+% ---------------------------------------------------------------------------
+% 4.2 Provider-Agnostic Multi-Model Support
+% ---------------------------------------------------------------------------
+\subsection{Provider-Agnostic Multi-Model Support}
+\label{sec:pipeline-models}
+
+% Single LLMClient abstraction — any OpenAI-compatible API
+% Chat (cloud) and embedding (local) configured independently
+% Tested: deepseek-v4-flash (non-reasoning), deepseek-v4-pro (reasoning, thinking enabled)
+% Switch models by changing env var — architecture outlives any specific LLM API
+
+% ---------------------------------------------------------------------------
+% 4.3 Transformation Presets
+% ---------------------------------------------------------------------------
+\subsection{Transformation Presets}
+\label{sec:pipeline-transforms}
+
+% 9 deterministic transformation types (inline in Sec 3.2 JSON listing, not enumerated)
+% LLM proposes transform + params; human verifies via live preview
+% Engine executes deterministically — pure functions, no LLM
+% Transforms validated against target schema at save time
+% Key: 9 primitives cover 90%+ real-world conversions, zero Python generated
+
+% =============================================================================
+% 5. EVALUATION
+% =============================================================================
+\section{Evaluation}
+\label{sec:evaluation}
+
+% ---------------------------------------------------------------------------
+% 5.1 Experimental Setup
+% ---------------------------------------------------------------------------
+\subsection{Experimental Setup}
+\label{sec:eval-setup}
+
+% Test matrix:
+%   4 API payload variants: clean, legacy (FLD codes), german, deep (3-level nested)
+%   4 CMSD entities: Resource (20 fields), ResourceClass (6), Order (4), PartType (5)
+%   2 models: deepseek-v4-flash (non-reasoning), deepseek-v4-pro (reasoning)
+%   2 RAG modes: no-RAG, catalog RAG (~2500 chars)
+%   n=5 per config; extended n=20 probe for Flash (640 total runs)
+%   Ground truth: manually verified field-by-field, reproducible via paper_evaluation_v2.py
+%
+% Metrics: accuracy (% ground truth correct), string acc, numeric acc,
+%   prompt/completion/total tokens, latency, RAG context length, confidence distribution.
+%
+% Two-phase: Phase I (n=5) baseline both models. Phase II (n=20, 640 runs)
+%   extended probe on Flash, Mann-Whitney U + Levene's test for RAG significance.
+
+% ---------------------------------------------------------------------------
+% 5.2 Accuracy Results
+% ---------------------------------------------------------------------------
+\subsection{Accuracy Results}
+\label{sec:eval-accuracy}
+
+% Table 1: Aggregate Accuracy by Model and RAG Mode (n=5)
+% | Model | No-RAG | Catalog RAG | String Acc (RAG) | Numeric Acc (RAG) |
+% | Flash | 95.8%  | 95.0%       | 99.3%            | 93.6%             |
+% | Pro   | 95.8%  | 96.4%       | 100.0%           | 95.2%             |
+%
+% Key findings: Flash matches Pro within 1.4pp at 3x speed;
+%   Pro + RAG = perfect string accuracy (100.0%); modest RAG delta masks asymmetry.
+%
+% Per-entity findings (prose, no table):
+%   Order: 100% across all 16 configs — solved.
+%   ResourceClass + PartType: 96-100%, minor dips on German.
+%   Resource: the bottleneck. 20 fields (7 string, 7 numeric, 6 null-prone).
+%     Legacy: ~45% regardless of model/RAG. Drives aggregate down from ~100% ceiling.
+%
+% Table 2: Entity Field Type Profiles
+% | Entity | String | Numeric | Null-prone | Total | Difficulty |
+% | Resource | 7 | 7 | 6 | 20 | Hard |
+% | ResourceClass | 5 | 1 | 0 | 6 | Moderate |
+% | Order | 4 | 0 | 0 | 4 | Easy |
+% | PartType | 4 | 1 | 0 | 5 | Easy |
+%
+% Difficulty = function of numeric count + null-proneness, not total fields.
+
+% ---------------------------------------------------------------------------
+% 5.3 Token Consumption and Reasoning Overhead
+% ---------------------------------------------------------------------------
+\subsection{Token Consumption and Reasoning Overhead}
+\label{sec:eval-tokens}
+
+% Table 3: Token Comparison by Model and RAG Mode
+% | Model | Metric | No-RAG | Catalog RAG | Delta |
+% | Flash | Prompt | ~1,310 | ~1,774 | +464 (35%) |
+% | Flash | Completion | ~2,183 | ~2,362 | +179 (8%) |
+% | Flash | Total | ~3,493 | ~4,136 | +643 (18%) |
+% | Pro | Prompt | ~1,310 | ~1,774 | +464 (35%) |
+% | Pro | Completion | ~2,407 | ~2,609 | +202 (8%) |
+% | Pro | Total | ~3,717 | ~4,383 | +666 (18%) |
+%
+% Takeaways: input determinism (identical prompt tokens), Pro ~10% more completion
+%   (deeper CoT), RAG only +8% completion (cost is in input), Flash 2-3x faster.
+
+% ---------------------------------------------------------------------------
+% 5.4 Statistical Invariance of RAG — When Context Cannot Help
+% ---------------------------------------------------------------------------
+\subsection{Statistical Invariance of RAG}
+\label{sec:eval-statistical}
+
+% Table 4: RAG vs No-RAG — Extended Statistical Analysis (Flash, n=20, 320 per mode)
+% | Entity | Variant | RAG Median [Min, Max] | no-RAG Median [Min, Max] | p-value |
+% | Resource | legacy | 45.0% [30.0, 65.0] | 45.0% [35.0, 60.0] | 0.657 |
+% | Resource | clean | 100.0% [65.0, 100.0] | 100.0% [65.0, 100.0] | 0.986 |
+% | Resource | german | 100.0% [70.0, 100.0] | 100.0% [70.0, 100.0] | 0.252 |
+% | Resource | deep | 100.0% [95.0, 100.0] | 100.0% [95.0, 100.0] | 0.225 |
+% | PartType | clean/german | 100.0% [80.0, 100.0] | 100.0% [80.0, 100.0] | >0.654 |
+% | ResourceClass | legacy/german | 100.0% [83.3, 100.0] | 100.0% [83.3, 100.0] | >0.302 |
+% | Order | all | 100.0% [100.0, 100.0] | 100.0% [100.0, 100.0] | 1.000 |
+%
+% All p > 0.05 — RAG zero significant improvement. Levene's p = 0.9631 (no variance stabilization).
+% Resource legacy catastrophic: median 45%, range 30-65%. Order ideal: deterministic 100%.
+%
+% Why RAG fails legacy numerics (aleatoric vs epistemic):
+%   String values carry identity cues ("CNC Machine 3000"). Numeric values (95.0) carry none.
+%   FLD007: 95.0 with 7 numeric fields all 0-100 range → catalog narrows CMSD range
+%   (availability 0.0-1.0) but cannot disambiguate. Aleatoric ambiguity, not epistemic.
+%   Cross-model: Pro = 46-50% on same bottleneck, +60% timeout from reasoning overhead.
+%   Neither retrieval quality nor model scaling compensates.
+
+% ---------------------------------------------------------------------------
+% 5.5 Confidence Calibration
+% ---------------------------------------------------------------------------
+\subsection{Confidence Calibration}
+\label{sec:eval-confidence}
+
+% (Prose, no table)
+% High confidence: 95%+ accuracy — system correctly identifies strong proposals
+% Medium/low: incorrect consistently flagged — system knows when guessing
+% Calibration enables targeted review; no false certainty on hard cases (legacy numerics)
+
+% =============================================================================
+% 6. DISCUSSION
+% =============================================================================
+\section{Discussion}
+\label{sec:discussion}
+
+% When the system works:
+%   - Clean APIs on well-typed entities: 100% accuracy, either model, with/without RAG
+%   - Deeply nested JSON: 100% — LLM navigates multi-level nesting
+%   - Non-English field names: 96-100%
+%   - String-only entities on legacy codes (Order): 100% even without RAG
+%
+% When it struggles:
+%   - Numeric ambiguity = fundamental bottleneck — values carry no identity signal
+%   - Resource legacy: 41-50% regardless of model/RAG — 7 numeric, opaque codes, 0-100 range
+%   - RAG cannot resolve: catalog describes targets, not FLD007 in source
+%   - Null-valued fields compound: 6 of Resource's 20 fields can be null
+%
+% Practical implications for SMEs (touchpoint 3):
+%   - Connect APIs, review flagged, generate twin — no CMSD expertise
+%   - Effort proportional to API quality, not entity complexity
+%   - Config persistent — corrections captured once, reusable
+%   - ~$0.01 per full factory model (Flash, no RAG)
+%   - System runs without RAG at 95.8% — simpler deployment for modern APIs
+%
+% Architecture as durable contribution:
+%   - JSON as AI-engine interface decouples proposal from execution
+%   - Deterministic runtime = production safety regardless of LLM
+%   - Graceful degradation = system works when dependencies fail
+%   - Provider-agnostic design outlives any specific LLM API
+
+% =============================================================================
+% 7. CONCLUSION
+% =============================================================================
+\section{Conclusion}
+\label{sec:conclusion}
+
+% Summary:
+%   Human-in-the-loop architecture for LLM-driven DT assembly from heterogeneous APIs.
+%   Core: field mapping as configuration, not code generation. LLM proposes JSON at
+%   design time; deterministic engine at runtime. Vendor-neutral canonical model.
+%
+% Key findings:
+%   - 95-96% aggregate accuracy across both models
+%   - Non-reasoning = reasoning within 1.4pp at 3x lower latency and tokens
+%   - Numeric ambiguity in legacy payloads = fundamental bottleneck
+%   - Target-side RAG = zero significant improvement (Mann-Whitney U, p > 0.05)
+%   - 3 of 4 entities 96-100%; Resource sole bottleneck
+%
+% Future work:
+%   - Graph-native DT instances with built-in reasoning: automatic relation propagation,
+%     blast-radius analysis, schema-change cascade management — extending from instance
+%     assembly to instance lifecycle management
+%   - Production deployment with live SAP/MES connectors (OData, RFC, SQL)
+%   - Controlled user study with manufacturing SMEs (time-to-twin, review burden)
+%
+% Broader significance:
+%   Thoughtful architecture — not just model capability — is key to AI in manufacturing.
+%   LLM = flexibility; deterministic engine = reliability; JSON config = bridge.
+%   Path to industrial-grade DTs for SMEs previously closed. Architecture embodies
+%   convergence the Industrial Metaverse track calls for.
+
+% =============================================================================
+% ACKNOWLEDGEMENTS
+% =============================================================================
+\section*{Acknowledgements}
+% TODO
+
+% =============================================================================
+% REFERENCES
+% =============================================================================
+\begin{thebibliography}{}
+
+% [REF NEEDED: ~20 citations across 4 clusters]
+% Cluster 2.1: Digital Twin Automation (3-4 refs)
+% Cluster 2.2: AI-Assisted Data Integration (3-4 refs)
+% Cluster 2.3: CMSD and ISO 22400 in Practice (3-4 refs)
+% Cluster 2.4: Smart Manufacturing & SME Digitalization (3-4 refs)
+% Additional: LLM confidence calibration, RAG surveys, ISO 22400 spec
+
+\end{thebibliography}
+
+\end{document}
