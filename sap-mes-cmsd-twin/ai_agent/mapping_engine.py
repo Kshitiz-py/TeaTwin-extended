@@ -1,0 +1,797 @@
+"""
+Mapping Engine — Uses RAG retrieval + LLM to propose field mappings
+between API response payloads and CMSD schema entities.
+Enhanced: multi-endpoint support, raw/converted values, smart reanalysis.
+"""
+
+import json
+import logging
+import sys, os
+from typing import Any
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from shared.transform import (
+    execute_transformation, validate_transformation,
+    TRANSFORMATION_PRESETS, VALID_TRANSFORMATIONS,
+)
+
+from .llm import llm_client
+from .rag.retriever import retriever
+
+logger = logging.getLogger("ai-agent.mapping-engine")
+
+
+def _get_entity_field_names(cmsd_entity: str) -> list[str]:
+    """Return all CMSD field names for an entity, derived from the dynamic catalog."""
+    from .cmsd_catalog import get_catalog
+    catalog = get_catalog()
+    entity = catalog.get("entities", {}).get(cmsd_entity)
+    if not entity:
+        return []
+    # Exclude private/internal fields
+    return [f["name"] for f in entity.get("fields", []) if not f["name"].startswith("_")]
+
+
+class MappingEngine:
+    """Proposes field mappings between API payloads and CMSD schema entities."""
+
+    async def propose_mapping(
+        self,
+        data_point_name: str,
+        cmsd_entity: str,
+        api_endpoint: str,
+        payload_analysis: dict[str, Any],
+        rag_context: str,
+    ) -> dict[str, Any]:
+        """
+        Use LLM + RAG context to propose a field mapping.
+        Returns a structured mapping dict.
+        Supports both single payload_analysis and list of analyses.
+        """
+        # Build the prompt
+        system_prompt = self._build_system_prompt()
+        user_prompt = self._build_user_prompt(
+            data_point_name, cmsd_entity, api_endpoint,
+            payload_analysis, rag_context,
+        )
+
+        try:
+            result = llm_client.chat_json(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                temperature=0.1,
+            )
+            # Validate the mapping
+            validated = self._validate_mapping(result, cmsd_entity)
+            return validated
+        except Exception as e:
+            logger.error(f"Mapping proposal failed: {e}")
+            # Return a fallback structure that the user can edit
+            return {
+                "data_point": data_point_name,
+                "cmsd_entity": cmsd_entity,
+                "api_endpoint": api_endpoint,
+                "mapping": {},
+                "error": str(e),
+                "requires_manual_review": True,
+            }
+
+    async def propose_mapping_multi(
+        self,
+        data_point_name: str,
+        cmsd_entity: str,
+        endpoint_labels: list[str],
+        payload_analyses: list[dict[str, Any]],
+        rag_context: str,
+    ) -> dict[str, Any]:
+        """
+        Propose a mapping using data from MULTIPLE API endpoints.
+        Each payload_analysis is a dict from api_explorer.analyze_payload().
+        endpoint_labels are human-readable labels like "SAP /resources".
+        """
+        system_prompt = self._build_system_prompt_multi()
+        user_prompt = self._build_user_prompt_multi(
+            data_point_name, cmsd_entity, endpoint_labels,
+            payload_analyses, rag_context,
+        )
+
+        try:
+            result = llm_client.chat_json(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                temperature=0.1,
+            )
+            validated = self._validate_mapping(result, cmsd_entity)
+            return validated
+        except Exception as e:
+            logger.error(f"Multi-endpoint mapping proposal failed: {e}")
+            return {
+                "data_point": data_point_name,
+                "cmsd_entity": cmsd_entity,
+                "api_endpoint": ", ".join(endpoint_labels),
+                "mapping": {},
+                "error": str(e),
+                "requires_manual_review": True,
+            }
+
+    async def chat_about_mapping(
+        self,
+        data_point_name: str,
+        current_mapping: dict[str, Any],
+        user_question: str,
+        rag_context: str | None = None,
+    ) -> str:
+        """
+        Chat with the agent about a specific mapping.
+        User can ask questions, request adjustments, etc.
+        """
+        context = rag_context or ""
+
+        system_prompt = (
+            "You are an expert CMSD (Core Manufacturing Simulation Data) mapping assistant. "
+            "Your job is to help the user understand and refine field mappings between "
+            "API response payloads and CMSD schema entities.\n\n"
+            "Be specific about field paths, data types, and transformations. "
+            "If the user asks for a change, explain how it would affect the mapping. "
+            "Keep responses concise and technical."
+        )
+
+        user_prompt = (
+            f"The user is working on mapping '{data_point_name}' to CMSD entity.\n\n"
+            f"Current mapping: {json.dumps(current_mapping, indent=2)}\n\n"
+            f"Relevant context: {context[:1000]}\n\n"
+            f"User's question: {user_question}"
+        )
+
+        return llm_client.chat(
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.3,
+        )
+
+    async def review_reanalyze(
+        self,
+        data_point_name: str,
+        cmsd_entity: str,
+        current_mapping: dict[str, Any],
+        flagged_fields: list[dict[str, str]],
+        payload_analyses: list[dict[str, Any]] | None = None,
+        rag_context: str | None = None,
+        flagged_relations: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        """
+        Targeted reanalysis: only refine fields AND relations the user has flagged.
+        flagged_fields is [{"field": "cycle_time", "comment": "use seconds"}, ...].
+        flagged_relations is [{"index": 0, "relation": {...}, "comment": "..."}, ...].
+        Returns the full mapping with only flagged items updated.
+        """
+        if not flagged_fields and not flagged_relations:
+            return current_mapping
+
+        context = rag_context or ""
+        cmsd_fields = _get_entity_field_names(cmsd_entity)
+
+        flagged_desc = "\n".join(
+            f"  - {f['field']}: {f.get('comment', '(no comment)')}"
+            for f in flagged_fields
+        )
+        flagged_names = {f["field"] for f in flagged_fields}
+
+        # Build relation guidance
+        relation_guidance = ""
+        if flagged_relations:
+            rel_lines = []
+            for fr in flagged_relations:
+                rel = fr.get("relation", {})
+                comment = fr.get("comment", "")
+                rel_lines.append(
+                    f"  - Relation #{fr.get('index', '?')}: {rel.get('match_key', {}).get('source', {}).get('api_path', '?')}"
+                    f" → {rel.get('target_entity', '?')}"
+                    f" (cmsd_path: {rel.get('cmsd_path', '?')})"
+                    f"{' — ' + comment if comment else ''}"
+                )
+            relation_guidance = (
+                "\n## Flagged Relations (cross-entity references):\n"
+                + "\n".join(rel_lines) + "\n"
+                "For each flagged relation: verify the target_entity is correct, check the cmsd_path "
+                "points to the right nested field in the CMSD model, and confirm the source api_path "
+                "exists in the payload. Update the relation fields as needed. "
+                "Keep relations that are correct unchanged. Remove relations that should not exist.\n"
+            )
+
+        # Only include the flagged fields + surrounding context in the prompt
+        relevant_mapping = {
+            k: v for k, v in current_mapping.get("mapping", {}).items()
+            if k in flagged_names
+        }
+
+        # Include current relations if any are flagged
+        relevant_relations = ""
+        if flagged_relations:
+            relevant_relations = "\n## Current Relations:\n" + json.dumps(
+                current_mapping.get("relations", []), indent=2
+            ) + "\n"
+
+        system_prompt = (
+            "You are an expert manufacturing data mapping engine. "
+            "Your task is to REFINE specific field mappings and cross-entity relations based on user feedback.\n\n"
+            "CRITICAL RULES:\n"
+            "1. ONLY return the fields listed under 'Flagged Fields' below. Do NOT return any other fields.\n"
+            "2. Use the user's comment for each field as guidance for how to fix the mapping.\n"
+            "3. type_conversion MUST be 'none' for every field. converted_value MUST equal raw_value.\n"
+            "4. Set confidence to 'manual' for all returned fields.\n"
+            "5. Look carefully at the API payload to find the correct field path.\n"
+            "6. If flagged relations are listed, also return a refined 'relations' array that addresses the user's concerns.\n"
+            "7. Fields referenced in relations MUST also appear in the mapping — relations are ADDITIONAL annotations.\n\n"
+            "Output format: JSON with ONLY the changed fields and/or relations:\n"
+            '{\n'
+            '  "mapping": {\n'
+            '    "cmsd_field_name": {\n'
+            '      "api_path": "corrected.path.to.field",\n'
+            '      "type_conversion": "none",\n'
+            '      "raw_value": "value from API payload at that path",\n'
+            '      "converted_value": "MUST equal raw_value (never transform)",\n'
+            '      "confidence": "manual",\n'
+            '      "source_endpoint": "which endpoint"\n'
+            '    }\n'
+            '  },\n'
+            '  "relations": [ ... ],\n'
+            '  "notes": "brief summary of what was changed"\n'
+            '}\n\n'
+            "IMPORTANT: Output ONLY the JSON object. No markdown, no explanation."
+        )
+
+        payload_info = ""
+        if payload_analyses:
+            for pa in payload_analyses:
+                payload_info += json.dumps(pa, indent=2, default=str)[:2000] + "\n"
+
+        user_prompt = (
+            f"## Data Point: {data_point_name}\n"
+            f"## CMSD Entity: {cmsd_entity}\n"
+            f"## Valid CMSD Fields: {', '.join(cmsd_fields)}\n\n"
+            f"## Flagged Fields (ONLY fix these):\n{flagged_desc}\n\n"
+            f"## Current mappings for flagged fields:\n"
+            f"{json.dumps(relevant_mapping, indent=2)}\n\n"
+            f"{relevant_relations}"
+            f"{relation_guidance}"
+            f"## API Payload Data:\n{payload_info}\n\n"
+            f"## RAG Context:\n{context[:1500]}\n\n"
+            f"Refine ONLY the flagged fields and/or relations based on the user comments. "
+            f"Find the correct api_path in the payload data."
+        )
+
+        try:
+            result = llm_client.chat_json(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                temperature=0.1,
+            )
+            refined = self._merge_review_refinements(current_mapping, result, cmsd_entity, flagged_names)
+            return refined
+        except Exception as e:
+            logger.error(f"Review reanalyze failed: {e}")
+            return {**current_mapping, "error": str(e)}
+
+    def _merge_review_refinements(
+        self,
+        current_mapping: dict[str, Any],
+        llm_result: dict[str, Any],
+        cmsd_entity: str,
+        flagged_fields: set[str],
+    ) -> dict[str, Any]:
+        """Merge review refinements — only update fields that were flagged."""
+        merged = dict(current_mapping)
+        merged_mapping = dict(merged.get("mapping", {}))
+
+        llm_mapping = llm_result.get("mapping", {})
+        for field, info in llm_mapping.items():
+            if field not in flagged_fields:
+                continue
+            if isinstance(info, dict):
+                merged_mapping[field] = {
+                    "api_path": info.get("api_path", merged_mapping.get(field, {}).get("api_path", "")),
+                    "type_conversion": info.get("type_conversion", "none"),
+                    "raw_value": info.get("raw_value", merged_mapping.get(field, {}).get("raw_value", "")),
+                    "converted_value": info.get("converted_value", ""),
+                    "sample_value": info.get("sample_value", info.get("raw_value", "")),
+                    "confidence": "manual",
+                    "source_endpoint": info.get("source_endpoint", merged_mapping.get(field, {}).get("source_endpoint", "")),
+                    "transformation": info.get("transformation", merged_mapping.get(field, {}).get("transformation", None)),
+                }
+                # Unconditionally force type_conversion="none" — LLM never transforms
+                merged_mapping[field]["type_conversion"] = "none"
+                merged_mapping[field]["converted_value"] = merged_mapping[field]["raw_value"]
+
+        merged["mapping"] = merged_mapping
+        merged["unmapped_fields"] = [
+            f for f in _get_entity_field_names(cmsd_entity)
+            if f not in merged_mapping
+        ]
+        # Merge relations if LLM returned refined ones
+        if "relations" in llm_result and isinstance(llm_result["relations"], list):
+            merged["relations"] = llm_result["relations"]
+        merged["notes"] = llm_result.get("notes", merged.get("notes", ""))
+        return merged
+
+    async def smart_reanalyze(
+        self,
+        data_point_name: str,
+        cmsd_entity: str,
+        current_mapping: dict[str, Any],
+        user_guidance: str,
+        payload_analyses: list[dict[str, Any]] | None = None,
+        endpoint_labels: list[str] | None = None,
+        rag_context: str | None = None,
+    ) -> dict[str, Any]:
+        """
+        Re-analyze a mapping with user guidance from chat.
+        The LLM receives the current mapping + user's instructions and
+        produces a refined mapping proposal, only changing what the user asked.
+        """
+        context = rag_context or ""
+        cmsd_fields = _get_entity_field_names(cmsd_entity)
+        fields_str = "\n".join(f"  - {f}" for f in cmsd_fields)
+
+        system_prompt = (
+            "You are an expert manufacturing data mapping engine. "
+            "Your task is to REFINE an existing field mapping based on specific user guidance.\n\n"
+            "RULES:\n"
+            "1. ONLY change fields the user explicitly mentions in their guidance.\n"
+            "2. PRESERVE all other fields exactly as they are in the current mapping.\n"
+            "3. Follow the user's instructions precisely (which API to use, which path, which conversion).\n"
+            "4. Include raw_value (exact value from API payload). converted_value MUST equal raw_value.\n"
+            "5. Set confidence to 'manual' for fields changed per user guidance.\n"
+            "6. CRITICAL: type_conversion MUST be 'none' for every field. Do NOT transform values. Do NOT invent conversions. A numeric value like 360000 must stay '360000', never become 'PT100H'.\n\n"
+            "Output format: JSON with this structure:\n"
+            '{\n'
+            '  "data_point": "string",\n'
+            '  "cmsd_entity": "string",\n'
+            '  "mapping": {\n'
+            '    "cmsd_field_name": {\n'
+            '      "api_path": "dot.path.to.field",\n'
+            '      "type_conversion": "none",\n'
+            '      "raw_value": "value from API payload",\n'
+            '      "converted_value": "MUST equal raw_value (never transform)",\n'
+            '      "sample_value": "value from payload (legacy)",\n'
+            '      "confidence": "manual|high|medium|low"\n'
+            '    }\n'
+            '  },\n'
+            '  "notes": "what was changed"\n'
+            '}\n\n'
+            "IMPORTANT: Output ONLY the JSON object. No markdown, no explanation."
+        )
+
+        endpoints_info = ""
+        if endpoint_labels and payload_analyses:
+            for label, analysis in zip(endpoint_labels, payload_analyses):
+                endpoints_info += (
+                    f"\n## Endpoint: {label}\n"
+                    f"{json.dumps(analysis, indent=2, default=str)[:1500]}\n"
+                )
+
+        user_prompt = (
+            f"## Data Point: {data_point_name}\n"
+            f"## Target CMSD Entity: {cmsd_entity}\n"
+            f"## All CMSD Fields (map every field that has data in the payload):\n{fields_str}\n\n"
+            f"## Current Mapping (preserve unless user says otherwise):\n"
+            f"{json.dumps(current_mapping, indent=2)}\n\n"
+            f"## Available API Payloads:{endpoints_info}\n\n"
+            f"## RAG Context:\n{context[:1500]}\n\n"
+            f"## USER GUIDANCE (follow these instructions):\n{user_guidance}\n\n"
+            f"Refine the mapping per the user's guidance. Only change what they asked."
+        )
+
+        try:
+            result = llm_client.chat_json(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                temperature=0.1,
+            )
+            # Merge refined fields into current mapping
+            refined = self._merge_refinements(current_mapping, result, cmsd_entity)
+            return refined
+        except Exception as e:
+            logger.error(f"Smart reanalyze failed: {e}")
+            return {
+                **current_mapping,
+                "error": str(e),
+                "requires_manual_review": True,
+            }
+
+    def _merge_refinements(
+        self,
+        current_mapping: dict[str, Any],
+        llm_result: dict[str, Any],
+        cmsd_entity: str,
+    ) -> dict[str, Any]:
+        """Merge LLM-refined fields into the current mapping, preserving untouched fields."""
+        merged = dict(current_mapping)
+        merged_mapping = dict(merged.get("mapping", {}))
+
+        llm_mapping = llm_result.get("mapping", {})
+        for field, info in llm_mapping.items():
+            if isinstance(info, dict):
+                merged_mapping[field] = {
+                    "api_path": info.get("api_path", merged_mapping.get(field, {}).get("api_path", "")),
+                    "type_conversion": info.get("type_conversion", "none"),
+                    "raw_value": info.get("raw_value", ""),
+                    "converted_value": info.get("converted_value", ""),
+                    "sample_value": info.get("sample_value", info.get("raw_value", "")),
+                    "confidence": info.get("confidence", "manual"),
+                }
+                # Unconditionally force type_conversion="none" — LLM never transforms
+                merged_mapping[field]["type_conversion"] = "none"
+                merged_mapping[field]["converted_value"] = merged_mapping[field]["raw_value"]
+
+        merged["mapping"] = merged_mapping
+        merged["notes"] = llm_result.get("notes", merged.get("notes", ""))
+        merged["unmapped_fields"] = [
+            f for f in _get_entity_field_names(cmsd_entity)
+            if f not in merged_mapping
+        ]
+        merged["requires_manual_review"] = len(merged["unmapped_fields"]) > 0
+        return merged
+
+    async def analyze_rag(
+        self,
+        data_point_name: str,
+        cmsd_entity: str,
+        api_endpoint: str | None = None,
+        payload_sample: str | None = None,
+    ) -> str:
+        """
+        Retrieve RAG context for a specific data point mapping.
+        Returns the assembled context string for use in prompts.
+        """
+        return retriever.retrieve_for_mapping(
+            data_point_name=data_point_name,
+            cmsd_entity=cmsd_entity,
+            api_endpoint=api_endpoint,
+            api_payload_sample=payload_sample,
+        )
+
+    def _build_system_prompt(self) -> str:
+        return (
+            "You are an expert manufacturing data mapping engine. "
+            "Your task is to analyze an API response payload and propose a mapping "
+            "to CMSD (Core Manufacturing Simulation Data) schema entities.\n\n"
+            "Rules:\n"
+            "1. Map API field paths (dot-notation like 'bom_header.bom_id') to CMSD fields.\n"
+            "2. For nested structures, use JSONPath-like notation: 'items[*].field'.\n"
+            "3. Do NOT propose type conversions. Only map fields. All type_conversion values must be 'none'.\n"
+            "4. If a CMSD field appears to have no match in the payload, set it to null.\n"
+            "5. Be thorough — attempt to map EVERY CMSD field that has a matching field in the payload, "
+            "even if the match is approximate. Only leave a field unmapped if it truly has no counterpart.\n"
+            "6. Include 'raw_value' (exact value from the API payload at the field path). "
+            "ALWAYS set 'converted_value' equal to 'raw_value'. type_conversion MUST be 'none' for every field. "
+            "Do NOT transform values. Do NOT invent conversions. "
+            "A numeric value like 360000 must stay '360000', never become 'PT100H'.\n"
+            "7. Identify the array of entity instances in the payload: find the JSONPath to the array "
+            "(e.g., $.resources[*]) and the field used as unique identifier within each item.\n"
+            "8. CROSS-ENTITY RELATIONS: If you detect fields in the API payload that appear to reference "
+            "OTHER CMSD entities (e.g., 'part_type_id' likely references PartType, 'resource_id' likely "
+            "references Resource, 'bom_id' likely references BillOfMaterials), propose a 'relations' array. "
+            "Use the RAG context to determine the correct CMSD nested path (cmsd_path) where the reference "
+            "lives in the target entity model. Only propose relations where you are reasonably confident "
+            "(confidence 'high' or 'medium'). If no cross-entity references are detected, omit relations.\n"
+            "IMPORTANT: The referenced field MUST remain in the 'mapping' object too. Relations are an "
+            "ADDITIONAL annotation — do NOT remove the field from 'mapping' just because it appears in "
+            "'relations'. The field should exist in BOTH places.\n\n"
+            "Output format: JSON with this structure:\n"
+            '{\n'
+            '  "data_point": "string",\n'
+            '  "cmsd_entity": "string",\n'
+            '  "api_endpoint": "string",\n'
+            '  "mapping": {\n'
+            '    "cmsd_field_name": {\n'
+            '      "api_path": "dot.path.to.field",\n'
+            '      "type_conversion": "none",\n'
+            '      "raw_value": "exact value from API payload at that path",\n'
+            '      "converted_value": "MUST equal raw_value (never transform)",\n'
+            '      "sample_value": "value from payload (legacy)",\n'
+            '      "confidence": "high|medium|low"\n'
+            '    },\n'
+            '    ...\n'
+            '  },\n'
+            '  "root_array_path": "path.to.array[*] if payload is list under a key",\n'
+            '  "instances": {\n'
+            '    "count_path": "JSONPath to the array of instances (e.g. $.machines[*])",\n'
+            '    "key_field": "field name used as unique identifier within each array item"\n'
+            '  },\n'
+            '  "relations": [\n'
+            '    {\n'
+            '      "cmsd_path": "nested.path.to.reference.field",\n'
+            '      "target_entity": "EntityName",\n'
+            '      "match_key": {\n'
+            '        "source": { "api_path": "field.in.this.payload" },\n'
+            '        "target": { "field": "identifier" }\n'
+            '      },\n'
+            '      "confidence": "high|medium"\n'
+            '    }\n'
+            '  ],\n'
+            '  "notes": "any observations about the mapping"\n'
+            '}\n\n'
+            "IMPORTANT: Output ONLY the JSON object. No markdown, no explanation."
+        )
+
+    def _build_system_prompt_multi(self) -> str:
+        return (
+            "You are an expert manufacturing data mapping engine. "
+            "Your task is to analyze MULTIPLE API response payloads and propose a mapping "
+            "to CMSD (Core Manufacturing Simulation Data) schema entities.\n\n"
+            "Rules:\n"
+            "1. Map API field paths (dot-notation like 'bom_header.bom_id') to CMSD fields.\n"
+            "2. For nested structures, use JSONPath-like notation: 'items[*].field'.\n"
+            "3. Do NOT propose type conversions. Only map fields. All type_conversion values must be 'none'.\n"
+            "4. A CMSD field can come from ANY of the provided endpoints — pick the best source.\n"
+            "5. If a CMSD field appears to have no match in ANY payload, leave it unmapped.\n"
+            "6. Be thorough — attempt to map EVERY CMSD field that has a matching field in ANY payload, "
+            "even if the match is approximate. Only leave a field unmapped if it truly has no counterpart.\n"
+            "7. Include 'raw_value' (exact value from the API payload at the field path). "
+            "ALWAYS set 'converted_value' equal to 'raw_value'. type_conversion MUST be 'none' for every field. "
+            "Do NOT transform values. Do NOT invent conversions. "
+            "A numeric value like 360000 must stay '360000', never become 'PT100H'.\n"
+            "8. In 'notes', mention which endpoint each field came from if relevant.\n"
+            "9. Identify the array of entity instances across payloads: find the JSONPath to the array "
+            "(e.g., $.resources[*]) and the field used as unique identifier within each item.\n"
+            "10. CROSS-ENTITY RELATIONS: If you detect fields across ANY payload that appear to reference "
+            "OTHER CMSD entities (e.g., 'part_type_id' likely references PartType, 'resource_id' likely "
+            "references Resource), propose a 'relations' array. Use the RAG context to determine the correct "
+            "CMSD nested path (cmsd_path). Only propose where confidence is 'high' or 'medium'.\n"
+            "IMPORTANT: The referenced field MUST remain in the 'mapping' object too. Relations are an "
+            "ADDITIONAL annotation — do NOT remove the field from 'mapping' just because it appears in "
+            "'relations'. The field should exist in BOTH places.\n\n"
+            "Output format: JSON with this structure:\n"
+            '{\n'
+            '  "data_point": "string",\n'
+            '  "cmsd_entity": "string",\n'
+            '  "api_endpoint": "comma-separated endpoints",\n'
+            '  "mapping": {\n'
+            '    "cmsd_field_name": {\n'
+            '      "api_path": "dot.path.to.field",\n'
+            '      "type_conversion": "none",\n'
+            '      "raw_value": "exact value from API payload at that path",\n'
+            '      "converted_value": "MUST equal raw_value (never transform)",\n'
+            '      "sample_value": "value from payload (legacy)",\n'
+            '      "source_endpoint": "which endpoint this came from",\n'
+            '      "confidence": "high|medium|low"\n'
+            '    },\n'
+            '    ...\n'
+            '  },\n'
+            '  "root_array_path": "path.to.array[*] if payload is list under a key",\n'
+            '  "instances": {\n'
+            '    "count_path": "JSONPath to the array of instances (e.g. $.machines[*])",\n'
+            '    "key_field": "field name used as unique identifier within each array item"\n'
+            '  },\n'
+            '  "relations": [\n'
+            '    {\n'
+            '      "cmsd_path": "nested.path.to.reference.field",\n'
+            '      "target_entity": "EntityName",\n'
+            '      "match_key": {\n'
+            '        "source": { "api_path": "field.in.payload" },\n'
+            '        "target": { "field": "identifier" }\n'
+            '      },\n'
+            '      "confidence": "high|medium"\n'
+            '    }\n'
+            '  ],\n'
+            '  "notes": "any observations about the mapping"\n'
+            '}\n\n'
+            "IMPORTANT: Output ONLY the JSON object. No markdown, no explanation."
+        )
+
+    def _build_user_prompt(
+        self,
+        data_point_name: str,
+        cmsd_entity: str,
+        api_endpoint: str,
+        payload_analysis: dict,
+        rag_context: str,
+    ) -> str:
+        cmsd_fields = _get_entity_field_names(cmsd_entity)
+        fields_str = "\n".join(f"  - {f}" for f in cmsd_fields)
+
+        return (
+            f"## Data Point: {data_point_name}\n"
+            f"## Target CMSD Entity: {cmsd_entity}\n"
+            f"## All CMSD Fields (map every field that has data in the payload):\n{fields_str}\n\n"
+            f"## API Endpoint: {api_endpoint}\n\n"
+            f"## RAG Context (from knowledge base):\n{rag_context[:2000]}\n\n"
+            f"## Live API Payload Analysis:\n"
+            f"{json.dumps(payload_analysis, indent=2, default=str)[:3000]}\n\n"
+            f"Propose a mapping from the API payload to the CMSD fields above."
+        )
+
+    def _build_user_prompt_multi(
+        self,
+        data_point_name: str,
+        cmsd_entity: str,
+        endpoint_labels: list[str],
+        payload_analyses: list[dict[str, Any]],
+        rag_context: str,
+    ) -> str:
+        cmsd_fields = _get_entity_field_names(cmsd_entity)
+        fields_str = "\n".join(f"  - {f}" for f in cmsd_fields)
+
+        parts = [
+            f"## Data Point: {data_point_name}",
+            f"## Target CMSD Entity: {cmsd_entity}",
+            f"## All CMSD Fields (map every field that has data in the payload):\n{fields_str}\n",
+            f"## RAG Context (from knowledge base):\n{rag_context[:2000]}\n",
+        ]
+
+        for i, (label, analysis) in enumerate(zip(endpoint_labels, payload_analyses)):
+            parts.append(
+                f"## API Endpoint {i+1}: {label}\n"
+                f"{json.dumps(analysis, indent=2, default=str)[:2000]}\n"
+            )
+
+        parts.append("Propose a mapping from ALL the API payloads above to the CMSD fields.")
+        return "\n".join(parts)
+
+    def _validate_mapping(self, proposed: dict, cmsd_entity: str) -> dict:
+        """
+        Validate the proposed mapping against known CMSD fields.
+        Adds confidence flags and marks unmapped required fields.
+        Extracts instances block (count_path, key_field) from LLM response.
+        """
+        known_fields = _get_entity_field_names(cmsd_entity)
+        mapping = proposed.get("mapping", {})
+
+        instances_raw = proposed.get("instances", {})
+        instances = {
+            "count_path": instances_raw.get("count_path", "") if isinstance(instances_raw, dict) else "",
+            "key_field": instances_raw.get("key_field", "") if isinstance(instances_raw, dict) else "",
+        }
+
+        # Validate and preserve relations from LLM response (Issue 06)
+        relations_raw = proposed.get("relations", [])
+        validated_relations: list[dict] = []
+        if isinstance(relations_raw, list):
+            for rel in relations_raw:
+                if isinstance(rel, dict) and rel.get("cmsd_path") and rel.get("target_entity"):
+                    validated_relations.append({
+                        "cmsd_path": rel.get("cmsd_path", ""),
+                        "target_entity": rel.get("target_entity", ""),
+                        "match_key": {
+                            "source": {
+                                "api_path": rel.get("match_key", {}).get("source", {}).get("api_path", ""),
+                            },
+                            "target": {
+                                "field": rel.get("match_key", {}).get("target", {}).get("field", "identifier"),
+                            },
+                        },
+                        "confidence": rel.get("confidence", "medium"),
+                    })
+
+        validated = {
+            "data_point": proposed.get("data_point", ""),
+            "cmsd_entity": cmsd_entity,
+            "api_endpoint": proposed.get("api_endpoint", ""),
+            "root_array_path": proposed.get("root_array_path", "$"),
+            "mapping": {},
+            "unmapped_fields": [],
+            "instances": instances,
+            "relations": validated_relations,
+            "notes": proposed.get("notes", ""),
+            "requires_manual_review": False,
+        }
+
+        # Validate each mapped field
+        for cmsd_field, map_info in mapping.items():
+            if isinstance(map_info, dict):
+                transformation = map_info.get("transformation", None)
+                validated["mapping"][cmsd_field] = {
+                    "api_path": map_info.get("api_path", ""),
+                    "type_conversion": map_info.get("type_conversion", "none"),
+                    "raw_value": map_info.get("raw_value", map_info.get("sample_value", "")),
+                    "converted_value": map_info.get("converted_value", ""),
+                    "sample_value": map_info.get("sample_value", map_info.get("raw_value", "")),
+                    "confidence": map_info.get("confidence", "medium"),
+                    "source_endpoint": map_info.get("source_endpoint", ""),
+                    "transformation": transformation,
+                }
+                # Safety net: when type_conversion is "none", converted_value MUST equal raw_value
+                validated["mapping"][cmsd_field]["type_conversion"] = "none"
+                validated["mapping"][cmsd_field]["converted_value"] = validated["mapping"][cmsd_field]["raw_value"]
+            elif isinstance(map_info, str):
+                validated["mapping"][cmsd_field] = {
+                    "api_path": map_info,
+                    "type_conversion": "none",
+                    "raw_value": "",
+                    "converted_value": "",
+                    "sample_value": "",
+                    "confidence": "medium",
+                    "source_endpoint": "",
+                    "transformation": None,
+                }
+
+        # Inject relation source fields into mapping so they remain visible in the field table.
+        # The field table is the source of truth — relations are annotations, not replacements.
+        for rel in validated_relations:
+            src_path = rel.get("match_key", {}).get("source", {}).get("api_path", "")
+            if src_path and src_path not in validated["mapping"]:
+                validated["mapping"][src_path] = {
+                    "api_path": src_path,
+                    "type_conversion": "none",
+                    "raw_value": "",
+                    "converted_value": "",
+                    "sample_value": "",
+                    "confidence": "high",
+                    "source_endpoint": "",
+                    "transformation": None,
+                    "_is_relation_source": True,
+                }
+
+        # Find unmapped known fields
+        for field in known_fields:
+            if field not in validated["mapping"]:
+                validated["unmapped_fields"].append(field)
+                validated["requires_manual_review"] = True
+
+        # Flag low-confidence mappings
+        for field, info in validated["mapping"].items():
+            if info.get("confidence") == "low":
+                validated["requires_manual_review"] = True
+                break
+
+        return validated
+
+    def apply_user_edits(
+        self,
+        current_mapping: dict[str, Any],
+        edits: dict[str, Any],
+    ) -> dict[str, Any]:
+        """
+        Apply user edits to a mapping.
+        edits is {cmsd_field: {api_path, type_conversion, transformation, ...} | null}
+        null means remove the field from mapping.
+        Validates transformations against TRANSFORMATION_PRESETS.
+        Returns validation_errors key if any transformation is invalid.
+        """
+        updated = dict(current_mapping)
+        mapping = dict(updated.get("mapping", {}))
+        validation_errors: dict[str, str] = {}
+
+        for field, edit in edits.items():
+            if edit is None:
+                mapping.pop(field, None)
+                if field in updated.get("unmapped_fields", []):
+                    updated["unmapped_fields"].remove(field)
+            else:
+                # Validate transformation if present
+                transform = edit.get("transformation", None)
+                if transform and isinstance(transform, dict) and transform.get("type", "none") != "none":
+                    err = validate_transformation(transform)
+                    if err:
+                        validation_errors[field] = err["error"]
+
+                mapping[field] = {
+                    "api_path": edit.get("api_path", mapping.get(field, {}).get("api_path", "")),
+                    "type_conversion": edit.get("type_conversion", "none"),
+                    "raw_value": edit.get("raw_value", mapping.get(field, {}).get("raw_value", "")),
+                    "converted_value": edit.get("converted_value", mapping.get(field, {}).get("converted_value", "")),
+                    "sample_value": edit.get("sample_value", edit.get("raw_value", mapping.get(field, {}).get("sample_value", ""))),
+                    "confidence": "manual",
+                    "source_endpoint": edit.get("source_endpoint", mapping.get(field, {}).get("source_endpoint", "")),
+                    "transformation": transform,
+                }
+                # Unconditionally force type_conversion="none" — user transforms go through apply-transformation
+                mapping[field]["type_conversion"] = "none"
+                mapping[field]["converted_value"] = mapping[field]["raw_value"]
+
+        updated["mapping"] = mapping
+        updated["unmapped_fields"] = [
+            f for f in CMSD_ENTITY_FIELDS.get(updated.get("cmsd_entity", ""), [])
+            if f not in mapping
+        ]
+        updated["requires_manual_review"] = len(updated["unmapped_fields"]) > 0
+        if validation_errors:
+            updated["validation_errors"] = validation_errors
+        return updated
+
+
+# Singleton
+mapping_engine = MappingEngine()
