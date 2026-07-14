@@ -19,7 +19,7 @@ The project runs as **6 Docker containers** (MySQL + mock SAP + mock MES + AI ag
 If you go with **local Ollama**, install it and pull a chat + embedding model once:
 ```bash
 ollama pull llama3.1          # chat model (or qwen2.5, etc.)
-ollama pull nomic-embed-text  # embedding model
+ollama pull qwen3-embedding:4b  # embedding model
 ```
 
 ---
