@@ -1,0 +1,200 @@
+{
+  "count": 15,
+  "part_types": [
+    {
+      "FLD001": "PT-RAW-001",
+      "FLD002": "Steel Block 100mm",
+      "FLD003": "Raw steel block for machining",
+      "FLD019": {
+        "FLD301": 100.0,
+        "FLD302": 100.0,
+        "FLD303": 50.0
+      },
+      "FLD201": 3.925,
+      "FLD202": "gray",
+      "FLD203": "box"
+    },
+    {
+      "FLD001": "PT-RAW-002",
+      "FLD002": "Aluminum Sheet 200mm",
+      "FLD003": "Aluminum sheet for stamping",
+      "FLD019": {
+        "FLD301": 200.0,
+        "FLD302": 150.0,
+        "FLD303": 2.0
+      },
+      "FLD201": 0.162,
+      "FLD202": "silver",
+      "FLD203": "box"
+    },
+    {
+      "FLD001": "PT-RAW-003",
+      "FLD002": "Plastic Granulate",
+      "FLD003": "Raw plastic granulate for injection molding",
+      "FLD019": {
+        "FLD301": null,
+        "FLD302": null,
+        "FLD303": null
+      },
+      "FLD201": null,
+      "FLD202": "white",
+      "FLD203": "granulate"
+    },
+    {
+      "FLD001": "PT-RAW-004",
+      "FLD002": "Steel Rod 500mm",
+      "FLD003": "Steel rod for turning",
+      "FLD019": {
+        "FLD301": 500.0,
+        "FLD302": 30.0,
+        "FLD303": 30.0
+      },
+      "FLD201": 3.534,
+      "FLD202": "gray",
+      "FLD203": "cylinder"
+    },
+    {
+      "FLD001": "PT-RAW-005",
+      "FLD002": "Electronic PCB Blank",
+      "FLD003": "Bare PCB for assembly",
+      "FLD019": {
+        "FLD301": 100.0,
+        "FLD302": 80.0,
+        "FLD303": 1.6
+      },
+      "FLD201": 0.035,
+      "FLD202": "green",
+      "FLD203": "box"
+    },
+    {
+      "FLD001": "PT-RAW-006",
+      "FLD002": "Bearing 6205",
+      "FLD003": "Standard ball bearing",
+      "FLD019": {
+        "FLD301": 52.0,
+        "FLD302": 52.0,
+        "FLD303": 15.0
+      },
+      "FLD201": 0.128,
+      "FLD202": "silver",
+      "FLD203": "cylinder"
+    },
+    {
+      "FLD001": "PT-RAW-007",
+      "FLD002": "M8 Bolt Set",
+      "FLD003": "M8x30 bolt with nut and washer",
+      "FLD019": {
+        "FLD301": 30.0,
+        "FLD302": 8.0,
+        "FLD303": 8.0
+      },
+      "FLD201": 0.018,
+      "FLD202": "silver",
+      "FLD203": "cylinder"
+    },
+    {
+      "FLD001": "PT-RAW-008",
+      "FLD002": "Oil Seal 30mm",
+      "FLD003": "Rubber oil seal",
+      "FLD019": {
+        "FLD301": 30.0,
+        "FLD302": 30.0,
+        "FLD303": 7.0
+      },
+      "FLD201": 0.005,
+      "FLD202": "black",
+      "FLD203": "cylinder"
+    },
+    {
+      "FLD001": "PT-INT-001",
+      "FLD002": "Machined Housing",
+      "FLD003": "Milled steel housing",
+      "FLD019": {
+        "FLD301": 150.0,
+        "FLD302": 120.0,
+        "FLD303": 80.0
+      },
+      "FLD201": 4.5,
+      "FLD202": "gray",
+      "FLD203": "box"
+    },
+    {
+      "FLD001": "PT-INT-002",
+      "FLD002": "Stamped Cover Plate",
+      "FLD003": "Stamped aluminum cover",
+      "FLD019": {
+        "FLD301": 180.0,
+        "FLD302": 130.0,
+        "FLD303": 1.5
+      },
+      "FLD201": 0.14,
+      "FLD202": "silver",
+      "FLD203": "box"
+    },
+    {
+      "FLD001": "PT-INT-003",
+      "FLD002": "Injection Molded Casing",
+      "FLD003": "Plastic casing for electronics",
+      "FLD019": {
+        "FLD301": 200.0,
+        "FLD302": 120.0,
+        "FLD303": 60.0
+      },
+      "FLD201": 0.25,
+      "FLD202": "white",
+      "FLD203": "box"
+    },
+    {
+      "FLD001": "PT-INT-004",
+      "FLD002": "Turned Shaft Assembly",
+      "FLD003": "Precision turned shaft with bearing seat",
+      "FLD019": {
+        "FLD301": 300.0,
+        "FLD302": 25.0,
+        "FLD303": 25.0
+      },
+      "FLD201": 1.2,
+      "FLD202": "gray",
+      "FLD203": "cylinder"
+    },
+    {
+      "FLD001": "PT-INT-005",
+      "FLD002": "Assembled PCB",
+      "FLD003": "PCB with components soldered",
+      "FLD019": {
+        "FLD301": 100.0,
+        "FLD302": 80.0,
+        "FLD303": 25.0
+      },
+      "FLD201": 0.08,
+      "FLD202": "green",
+      "FLD203": "box"
+    },
+    {
+      "FLD001": "PT-FG-001",
+      "FLD002": "Electric Motor Assembly 2kW",
+      "FLD003": "Final assembled 2kW electric motor",
+      "FLD019": {
+        "FLD301": 350.0,
+        "FLD302": 200.0,
+        "FLD303": 200.0
+      },
+      "FLD201": 15.0,
+      "FLD202": "blue",
+      "FLD203": "cylinder"
+    },
+    {
+      "FLD001": "PT-FG-002",
+      "FLD002": "Pump Unit Complete",
+      "FLD003": "Final assembled pump unit",
+      "FLD019": {
+        "FLD301": 400.0,
+        "FLD302": 250.0,
+        "FLD303": 250.0
+      },
+      "FLD201": 22.0,
+      "FLD202": "red",
+      "FLD203": "box"
+    }
+  ]
+}

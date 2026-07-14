@@ -1,0 +1,429 @@
+import { useState, useEffect, useRef } from 'react';
+import { api, RefreshReport, PreflightResult } from '../services/api';
+
+interface GenerateModalProps {
+  open: boolean;
+  mappingIds: string[];
+  onClose: () => void;
+  onComplete: (report: RefreshReport) => void;
+  onViewDashboard?: () => void;
+  preflightResult?: PreflightResult | null;
+  onCreateManual?: (entityType: string, identifiers: string[]) => void;
+}
+
+type PhaseStatus = 'pending' | 'running' | 'done' | 'error';
+
+interface Phase {
+  key: string;
+  label: string;
+  status: PhaseStatus;
+  detail?: string;
+}
+
+export default function GenerateModal({ open, mappingIds, onClose, onComplete, onViewDashboard, preflightResult, onCreateManual }: GenerateModalProps) {
+  const [phases, setPhases] = useState<Phase[]>([
+    { key: 'preflight', label: 'Pre-flight check', status: 'pending' },
+    { key: 'fetch', label: 'Fetching APIs', status: 'pending' },
+    { key: 'build', label: 'Building entities', status: 'pending' },
+    { key: 'merge', label: 'Merging with twin', status: 'pending' },
+    { key: 'diff', label: 'Detecting changes', status: 'pending' },
+    { key: 'done', label: 'Applying to twin', status: 'pending' },
+  ]);
+  const [report, setReport] = useState<RefreshReport | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [running, setRunning] = useState(false);
+  const hasStarted = useRef(false);
+
+  useEffect(() => {
+    if (!open || hasStarted.current) return;
+    hasStarted.current = true;
+    runGeneration();
+  }, [open, mappingIds]);
+
+  const updatePhase = (key: string, status: PhaseStatus, detail?: string) => {
+    setPhases(prev => prev.map(p => p.key === key ? { ...p, status, detail } : p));
+  };
+
+  const runGeneration = async () => {
+    setRunning(true);
+    setError(null);
+
+    try {
+      updatePhase('preflight', 'running');
+      await new Promise(r => setTimeout(r, 300));
+      updatePhase('preflight', 'done', mappingIds.length > 1 ? `${mappingIds.length} mappings queued` : 'Passed');
+
+      updatePhase('fetch', 'running');
+      const result = await api.refreshInstances(mappingIds, false);
+      updatePhase('fetch', 'done', getGenerationSummary(result));
+
+      updatePhase('build', 'running');
+      await new Promise(r => setTimeout(r, 200));
+      updatePhase('build', 'done', getBuildSummary(result));
+
+      updatePhase('merge', 'running');
+      await new Promise(r => setTimeout(r, 200));
+      updatePhase('merge', 'done', result.phases.merge.hardcoded_fallback.length > 0
+        ? `${result.phases.merge.hardcoded_fallback.length} from hardcoded` : 'All from mappings');
+
+      updatePhase('diff', 'running');
+      await new Promise(r => setTimeout(r, 200));
+      updatePhase('diff', 'done', `${result.changes_detected} changes`);
+
+      updatePhase('done', 'done', `${result.elapsed_ms}ms`);
+
+      setReport(result);
+      setRunning(false);
+      onComplete(result);
+    } catch (e: any) {
+      setError(e.message || 'Generation failed');
+      // Mark current phase as error
+      setPhases(prev => prev.map(p =>
+        p.status === 'running' ? { ...p, status: 'error' as PhaseStatus, detail: e.message } : p
+      ));
+      setRunning(false);
+    }
+  };
+
+  const handleRetry = () => {
+    setError(null);
+    setReport(null);
+    setPhases(prev => prev.map(p => ({ ...p, status: 'pending' as PhaseStatus, detail: undefined })));
+    runGeneration();
+  };
+
+  const handleRetryFailed = async () => {
+    if (!report) return;
+    const failedIds = report.fetch_errors
+      .map(e => (e as any).mapping_id)
+      .filter(Boolean) as string[];
+    if (failedIds.length === 0) return;
+    setError(null);
+    setReport(null);
+    setPhases(prev => prev.map(p => ({ ...p, status: 'pending' as PhaseStatus, detail: undefined })));
+    setRunning(true);
+    try {
+      const result = await api.refreshInstances(failedIds, false);
+      setReport(result);
+      setPhases(prev => prev.map(p => ({ ...p, status: 'done' as PhaseStatus })));
+      onComplete(result);
+    } catch (e: any) {
+      setError(e.message || 'Retry failed');
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  if (!open) return null;
+
+  const hasErrors = (report?.fetch_errors && report.fetch_errors.length > 0) || (report?.relation_errors && report.relation_errors.length > 0);
+  const allFailed = hasErrors && (!report?.phases?.generation || Object.keys(report.phases.generation).length === 0);
+
+  return (
+    <div style={{
+      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+      background: 'rgba(0,0,0,0.7)', display: 'flex',
+      alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+    }}>
+      <div style={{
+        background: '#1e293b', borderRadius: '12px', border: '1px solid #334155',
+        padding: '28px', width: '520px', maxHeight: '80vh', overflow: 'auto',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+          <h3 style={{ color: '#f1f5f9', margin: 0, fontSize: '18px' }}>Generate & Apply</h3>
+          <button
+            onClick={onClose}
+            style={{
+              width: '28px', height: '28px', borderRadius: '6px', border: '1px solid #334155',
+              background: 'transparent', color: '#94a3b8', fontSize: '14px', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1,
+              transition: 'all 0.15s',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = '#334155'; e.currentTarget.style.color = '#f1f5f9'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#94a3b8'; }}
+          >✕</button>
+        </div>
+
+        {/* Phases */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px' }}>
+          {phases.map(phase => (
+            <div key={phase.key} style={{
+              display: 'flex', alignItems: 'center', gap: '10px',
+              padding: '8px 12px', borderRadius: '6px',
+              background: phase.status === 'running' ? '#1e3a5f' : 'transparent',
+              border: phase.status === 'running' ? '1px solid #3b82f6' : '1px solid transparent',
+            }}>
+              <span style={{ fontSize: '14px', width: '20px', textAlign: 'center' }}>
+                {phase.status === 'pending' && <span style={{ color: '#64748b' }}>○</span>}
+                {phase.status === 'running' && (
+                  <span style={{
+                    display: 'inline-block', width: '12px', height: '12px',
+                    border: '2px solid #3b82f6', borderTopColor: 'transparent',
+                    borderRadius: '50%', animation: 'spin 0.6s linear infinite',
+                  }} />
+                )}
+                {phase.status === 'done' && <span style={{ color: '#22c55e' }}>✓</span>}
+                {phase.status === 'error' && <span style={{ color: '#ef4444' }}>✕</span>}
+              </span>
+              <span style={{
+                color: phase.status === 'done' ? '#e2e8f0' :
+                       phase.status === 'error' ? '#fca5a5' :
+                       phase.status === 'running' ? '#93c5fd' : '#64748b',
+                fontSize: '13px', flex: 1,
+              }}>
+                {phase.label}
+              </span>
+              {phase.detail && (
+                <span style={{ color: '#64748b', fontSize: '11px' }}>{phase.detail}</span>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <style>{'@keyframes spin { to { transform: rotate(360deg); } }'}</style>
+
+        {/* Pre-flight checks — transparent validation results */}
+        {preflightResult && (
+          <div style={{
+            padding: '10px 12px', borderRadius: '6px', marginBottom: '14px',
+            background: '#0f172a', border: '1px solid #334155',
+          }}>
+            <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              Pre-flight Checks
+            </div>
+            {[
+              {
+                label: 'Dependencies',
+                passed: preflightResult.checks.dependencies.passed,
+                detail: preflightResult.checks.dependencies.auto_selected?.length > 0
+                  ? `Auto-selected: ${preflightResult.checks.dependencies.auto_selected.join(', ')}`
+                  : preflightResult.checks.dependencies.missing?.length > 0
+                    ? `Missing: ${preflightResult.checks.dependencies.missing.map((m: any) => m.for_entity).join(', ')}`
+                    : 'All satisfied',
+              },
+              {
+                label: 'Relations',
+                passed: preflightResult.checks.relations?.passed ?? true,
+                detail: (preflightResult.checks.relations?.missing_targets?.length ?? 0) > 0
+                  ? `Missing targets: ${preflightResult.checks.relations!.missing_targets.map((r: any) => r.target_entity).join(', ')}`
+                  : 'All targets available',
+              },
+              {
+                label: 'Field Coverage',
+                passed: preflightResult.checks.field_coverage.passed,
+                detail: preflightResult.checks.field_coverage.flagged?.length > 0
+                  ? `${preflightResult.checks.field_coverage.flagged.length} field(s) flagged`
+                  : 'All fields approved',
+              },
+              {
+                label: 'API Reachability',
+                passed: preflightResult.checks.api_reachability.passed,
+                detail: preflightResult.checks.api_reachability.unreachable?.length > 0
+                  ? `${preflightResult.checks.api_reachability.unreachable.length} unreachable`
+                  : 'All reachable',
+              },
+            ].map(check => (
+              <div key={check.label} style={{
+                display: 'flex', alignItems: 'center', gap: '8px',
+                fontSize: '12px', padding: '3px 0',
+              }}>
+                <span style={{ color: check.passed ? '#22c55e' : '#ef4444', width: '14px' }}>
+                  {check.passed ? '✓' : '✕'}
+                </span>
+                <span style={{ color: '#e2e8f0', minWidth: '110px' }}>{check.label}</span>
+                <span style={{ color: check.passed ? '#64748b' : '#fca5a5', fontSize: '11px' }}>
+                  {check.detail}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Error */}
+        {error && (
+          <div style={{
+            padding: '12px', background: '#7f1d1d', borderRadius: '8px',
+            border: '1px solid #ef4444', marginBottom: '16px',
+          }}>
+            <p style={{ color: '#fca5a5', fontSize: '13px', margin: 0 }}>{error}</p>
+          </div>
+        )}
+
+        {/* Success Summary */}
+        {report && !running && (
+          <div style={{
+            padding: '16px', borderRadius: '8px', marginBottom: '16px',
+            background: allFailed ? '#7f1d1d' : hasErrors ? '#78350f' : '#064e3b',
+            border: `1px solid ${allFailed ? '#ef4444' : hasErrors ? '#f59e0b' : '#22c55e'}`,
+          }}>
+            <div style={{ color: '#f1f5f9', fontSize: '14px', fontWeight: 600, marginBottom: '8px' }}>
+              {allFailed ? 'Generation Failed' : hasErrors ? 'Partial Success' : 'Generation Complete'}
+            </div>
+            {/* Topological order */}
+            {report.phases.topological_order && report.phases.topological_order.length > 1 && (
+              <div style={{ color: '#94a3b8', fontSize: '11px', marginBottom: '6px' }}>
+                Build order: {report.phases.topological_order.map((id, i) =>
+                  `${i + 1}. ${id.slice(0, 8)}`
+                ).join(' → ')}
+              </div>
+            )}
+            {Object.entries(report.phases.generation).map(([entity, info]) => (
+              <div key={entity} style={{ color: '#e2e8f0', fontSize: '12px', marginBottom: '4px' }}>
+                {entity}: {info.count} instance(s) from {info.source}
+              </div>
+            ))}
+            {report.phases.merge.hardcoded_fallback.length > 0 && (
+              <div style={{ color: '#94a3b8', fontSize: '11px', marginTop: '4px' }}>
+                Hardcoded fallback: {report.phases.merge.hardcoded_fallback.join(', ')}
+              </div>
+            )}
+            {report.fetch_errors.length > 0 && (
+              <div style={{ marginTop: '8px' }}>
+                <div style={{ color: '#fca5a5', fontSize: '11px', fontWeight: 600, marginBottom: '4px' }}>
+                  Fetch Errors:
+                </div>
+                {report.fetch_errors.map((err, i) => (
+                  <div key={i} style={{ color: '#fca5a5', fontSize: '11px', marginLeft: '8px' }}>
+                    {err.entity_type} — {err.error}
+                  </div>
+                ))}
+              </div>
+            )}
+            {report.relation_errors && report.relation_errors.length > 0 && (() => {
+              // Extract {entityType: [identifiers]} from relation errors
+              const missingByIdentifier: Record<string, Set<string>> = {};
+              for (const err of report.relation_errors) {
+                const field = err.field || '';
+                const match = field.match(/relation→(\w+)/);
+                if (!match) continue;
+                const target = match[1];
+                if (!missingByIdentifier[target]) missingByIdentifier[target] = new Set();
+                // Extract identifier value from error message like "instance '5' not found..."
+                const idMatch = err.error?.match(/instance '([^']+)'/);
+                if (idMatch) missingByIdentifier[target].add(idMatch[1]);
+              }
+              return (
+                <div style={{ marginTop: '8px' }}>
+                  <div style={{ color: '#ef4444', fontSize: '11px', fontWeight: 600, marginBottom: '4px' }}>
+                    Relation Errors ({report.relation_errors.length}):
+                  </div>
+                  {report.relation_errors.slice(0, 8).map((err: any, i: number) => (
+                    <div key={i} style={{ color: '#ef4444', fontSize: '11px', marginLeft: '8px', marginBottom: '2px' }}>
+                      {err.entity_type}{err.instance_key ? `/${err.instance_key}` : ''}: <strong>{err.field}</strong> — {err.error}
+                    </div>
+                  ))}
+                  {report.relation_errors.length > 8 && (
+                    <div style={{ color: '#64748b', fontSize: '11px', marginLeft: '8px' }}>
+                      ...and {report.relation_errors.length - 8} more
+                    </div>
+                  )}
+                  {Object.keys(missingByIdentifier).length > 0 && (
+                    <div style={{
+                      marginTop: '8px', padding: '10px 14px', borderRadius: '8px',
+                      background: '#422006', border: '1px solid #78350f',
+                    }}>
+                      <div style={{ color: '#fde68a', fontSize: '11px', marginBottom: '8px' }}>
+                        The following referenced entities are missing. Create them manually to resolve.
+                      </div>
+                      {Object.entries(missingByIdentifier).map(([entity, ids]) => (
+                        <button
+                          key={entity}
+                          onClick={() => {
+                            onClose();
+                            onCreateManual?.(entity, [...ids]);
+                          }}
+                          style={{
+                            display: 'block', width: '100%', marginBottom: '4px',
+                            padding: '7px 12px', borderRadius: '6px', border: '1px solid #b45309',
+                            background: '#1e293b', color: '#fde68a', fontSize: '11px',
+                            cursor: 'pointer', textAlign: 'left', fontFamily: 'monospace',
+                            transition: 'background 0.15s',
+                          }}
+                          onMouseEnter={e => (e.currentTarget.style.background = '#1a1f2e')}
+                          onMouseLeave={e => (e.currentTarget.style.background = '#1e293b')}
+                        >
+                          Create manual <strong>{entity}</strong> — missing: {ids.join(', ')}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+            {report.field_warnings && report.field_warnings.length > 0 && (
+              <div style={{ marginTop: '8px' }}>
+                <div style={{ color: '#fbbf24', fontSize: '11px', fontWeight: 600, marginBottom: '4px' }}>
+                  Field Warnings ({report.field_warnings.length}):
+                </div>
+                {report.field_warnings.slice(0, 10).map((w: any, i: number) => (
+                  <div key={i} style={{ color: '#fbbf24', fontSize: '11px', marginLeft: '8px' }}>
+                    {w.entity_type}/{w.instance_key}: <strong>{w.field}</strong> — {w.api_path?.slice?.(0, 80) || w.api_path}
+                  </div>
+                ))}
+                {report.field_warnings.length > 10 && (
+                  <div style={{ color: '#64748b', fontSize: '11px', marginLeft: '8px' }}>
+                    ...and {report.field_warnings.length - 10} more
+                  </div>
+                )}
+              </div>
+            )}
+            <div style={{ color: '#94a3b8', fontSize: '11px', marginTop: '6px' }}>
+              {report.changes_detected} change(s) · {report.elapsed_ms}ms
+            </div>
+          </div>
+        )}
+
+        {/* Actions */}
+        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+          {error && (
+            <button onClick={handleRetry} style={{
+              padding: '8px 16px', borderRadius: '6px',
+              background: '#7c3aed', border: 'none', color: '#fff',
+              cursor: 'pointer', fontSize: '13px', fontWeight: 600,
+            }}>
+              Retry
+            </button>
+          )}
+          {hasErrors && !allFailed && (
+            <button onClick={handleRetryFailed} style={{
+              padding: '8px 16px', borderRadius: '6px',
+              background: '#78350f', border: '1px solid #f59e0b', color: '#fbbf24',
+              cursor: 'pointer', fontSize: '13px', fontWeight: 600,
+            }}>
+              Retry Failed
+            </button>
+          )}
+          {report && !running && (
+            <button onClick={() => { onClose(); onViewDashboard?.(); }} style={{
+              padding: '8px 16px', borderRadius: '6px',
+              background: '#065f46', border: 'none', color: '#6ee7b7',
+              cursor: 'pointer', fontSize: '13px', fontWeight: 600,
+            }}>
+              {allFailed ? 'Close' : 'View Dashboard'}
+            </button>
+          )}
+          {running && (
+            <button onClick={onClose} style={{
+              padding: '8px 16px', borderRadius: '6px',
+              background: '#334155', border: 'none', color: '#94a3b8',
+              cursor: 'pointer', fontSize: '13px',
+            }}>
+              Cancel
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function getGenerationSummary(report: RefreshReport): string {
+  const entries = Object.entries(report.phases.generation);
+  if (entries.length === 0) return 'No entities generated';
+  return entries.map(([k, v]) => `${v.count} ${k}`).join(', ');
+}
+
+function getBuildSummary(report: RefreshReport): string {
+  const total = Object.values(report.phases.generation).reduce((sum, v) => sum + v.count, 0);
+  return `${total} instance(s) built`;
+}
