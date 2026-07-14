@@ -13,6 +13,11 @@ from .connection_manager import connection_manager
 
 logger = logging.getLogger("ai-agent.api-explorer")
 
+# Row cap when firing a SAP OData entity set via /mapping/fetch (analysis only — the
+# runtime factory re-fetches at full scale). 100 rows is plenty for field-path extraction
+# + sample values without pulling a whole SAP table.
+ODATA_FETCH_TOP = 100
+
 
 class APIExplorer:
     """Fetches and analyzes live API payloads from data sources."""
@@ -31,12 +36,39 @@ class APIExplorer:
         """
         Fetch a live payload from a configured data source.
         Returns the JSON response and metadata.
+
+        SAP OData sources are routed through ``ODataClient`` (adds ``$format=json``,
+        ``sap-client``, ``DataServiceVersion: 2.0``, proper Basic auth). A generic GET
+        would get Atom/XML (the OData v2 default) and ``resp.json()`` would raise
+        "Expecting value: line 1 column 1 (char 0)".
         """
         source = self._conn_manager.get_source(source_id)
         if not source:
             raise ValueError(f"Source '{source_id}' not configured")
 
         base_url = source.get("base_url", "").rstrip("/")
+        if not base_url:
+            raise ValueError(f"Source '{source_id}' has no base_url")
+
+        # SAP OData v2 → use the OData client so the response is JSON, not Atom/XML.
+        if "/sap/opu/odata/" in base_url.lower():
+            from shared.odata.client import ODataClient
+            from shared.odata.auth import normalize_auth
+            entity_set = endpoint.strip("/").split("?")[0]
+            if not entity_set:
+                raise ValueError("OData endpoint has no entity set name")
+            sap_client = (source.get("sap_client")
+                          or source.get("extra_headers", {}).get("sap-client") or "200")
+            client = ODataClient(base_url, normalize_auth(source), sap_client=sap_client, timeout=30.0)
+            data = await client.fetch_entity_set(entity_set, top=ODATA_FETCH_TOP)
+            return {
+                "status_code": 200,
+                "url": f"{base_url}/{entity_set}",
+                "method": method,
+                "payload": data,
+                "payload_size_bytes": len(json.dumps(data, default=str)),
+            }
+
         full_url = f"{base_url}{endpoint}" if endpoint.startswith("/") else f"{base_url}/{endpoint}"
 
         headers = {}

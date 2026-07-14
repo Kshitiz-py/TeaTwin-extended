@@ -170,6 +170,15 @@ export interface FieldAttribution {
   };
 }
 
+export interface RecommendDebug {
+  system_prompt: string;
+  user_prompt: string;
+  candidates: Record<string, Array<{ entity_set: string; entity_type: string; score: number; content: string }>>;
+  raw_response: string;
+  model: string;
+  provider: string;
+}
+
 export interface RecommendResponse {
   cmsd_entity: string;
   covering_endpoints: CoveringEndpoint[];
@@ -178,6 +187,7 @@ export interface RecommendResponse {
   coverage_gaps: string[];
   proposed_relations: any[];
   notes?: string;
+  debug?: RecommendDebug;
 }
 
 export interface SampleResponse {

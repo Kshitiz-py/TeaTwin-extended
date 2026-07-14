@@ -158,6 +158,10 @@ export default function ConnectSources({ onSourcesComplete, initialSources }: Co
       setIndexResult('Add and save a SAP source first (e.g. "Real SAP (a33p)").');
       return;
     }
+    if (sap.auth_type === 'basic' && (!sap.username || !sap.password)) {
+      setIndexResult('Enter the SAP username & password in the source card first, then Discover.');
+      return;
+    }
     setDiscovering(true);
     setIndexResult(null);
     try {

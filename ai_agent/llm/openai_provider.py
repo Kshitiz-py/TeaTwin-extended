@@ -109,7 +109,7 @@ class OpenAIProvider(LLMProvider):
         messages: list[dict[str, str]],
         temperature: float = 0.1,
         stream: bool = False,
-        max_tokens: int = 4096,
+        max_tokens: int = 8192,  # was 4096 — truncated structured JSON (recommender covering sets); 8192 = DeepSeek max output
     ) -> str:
         payload = {
             "model": self.chat_model,

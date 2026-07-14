@@ -11,6 +11,7 @@ import os
 import traceback
 from typing import Any, AsyncGenerator
 
+import httpx
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -31,6 +32,7 @@ router = APIRouter(prefix="/api/agent/v1")
 # ─── Request Models ────────────────────────────────────────
 
 class SourceConfig(BaseModel):
+    id: str | None = None  # present when updating an existing source → upsert by id
     name: str
     base_url: str
     auth_type: str = "none"
@@ -316,6 +318,12 @@ async def discover_source(source_id: str, request: DiscoverRequest):
         return await odata_ingestor.discover(source_id, request.entity_set_filter)
     except ValueError as e:
         raise HTTPException(404, str(e))
+    except httpx.HTTPStatusError as e:
+        # Surface the real upstream SAP status (401/403/404/...) instead of a blanket
+        # 502, so the UI shows "HTTP 401" on auth failures rather than a misleading 502.
+        code = e.response.status_code
+        logger.error(f"Discover failed for {source_id}: upstream returned {code} {e.response.reason_phrase}")
+        raise HTTPException(code, f"Discover failed: SAP returned {code} {e.response.reason_phrase}")
     except Exception as e:
         logger.error(f"Discover failed for {source_id}: {e}\n{traceback.format_exc()}")
         raise HTTPException(502, f"Discover failed: {e}")
@@ -341,6 +349,10 @@ async def sample_source(source_id: str, request: SampleRequest):
         return await odata_ingestor.sample(source_id, request.entity_set, request.top)
     except ValueError as e:
         raise HTTPException(404, str(e))
+    except httpx.HTTPStatusError as e:
+        code = e.response.status_code
+        logger.error(f"Sample failed for {source_id}: upstream returned {code} {e.response.reason_phrase}")
+        raise HTTPException(code, f"Sample failed: SAP returned {code} {e.response.reason_phrase}")
     except Exception as e:
         logger.error(f"Sample failed for {source_id}: {e}\n{traceback.format_exc()}")
         raise HTTPException(502, f"Sample failed: {e}")

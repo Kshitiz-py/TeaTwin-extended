@@ -74,14 +74,20 @@ class ConnectionManager:
 
     # ── CRUD ──────────────────────────────────────────────────────────────
     def add_source(self, source: dict[str, Any]) -> dict[str, Any]:
-        """
-        Add or update a data source configuration.
-        Returns the created source with its ID.
+        """Add or update a data source configuration (upsert by ``id``).
+
+        Returns the created/updated source with its ID. If ``id`` is present and
+        matches an existing source, that record is updated in place — so editing a
+        source card (e.g. typing SAP credentials) modifies the same source instead
+        of spawning a duplicate under a new id. If ``id`` is absent/empty, a new id
+        is minted. Runtime ``status``/``last_tested`` are preserved across edits
+        (the SourceConfig payload doesn't carry them).
         """
         source_id = source.get("id") or f"src-{uuid.uuid4().hex[:8]}"
+        existing = self._sources.get(source_id)
         source["id"] = source_id
-        source["status"] = "configured"
-        source["last_tested"] = None
+        source["status"] = existing.get("status", "configured") if existing else "configured"
+        source["last_tested"] = existing.get("last_tested") if existing else None
         self._sources[source_id] = source
         self._persist()
         logger.info(f"Source added/updated: {source_id} ({source.get('name', 'unnamed')})")
@@ -106,8 +112,10 @@ class ConnectionManager:
     async def test_connection(self, source_id: str) -> dict[str, Any]:
         """
         Test connectivity to a data source.
-        Makes a health-check call to the base URL.
-        Returns {success, status_code, message, latency_ms}.
+        Makes an authenticated health-check call to the base URL and requires a 2xx
+        response. 401/403 → failure ("Unauthorized") so a source with wrong or empty
+        credentials is NOT reported as connected. Tries /health, /, /api/health in turn
+        (404/405 on one path → try the next). Returns {success, status_code, message, latency_ms}.
         """
         source = self._sources.get(source_id)
         if not source:
@@ -137,49 +145,60 @@ class ConnectionManager:
 
         start = time.time()
 
+        def _record(status: str) -> None:
+            source["status"] = status
+            source["last_tested"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+            self._persist()
+
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
-                # Try common health endpoints
+                last_status: int | None = None
+                last_conn_err: str | None = None
                 for health_path in ["/health", "/", "/api/health"]:
                     try:
                         resp = await client.get(f"{base_url}{health_path}", headers=headers)
-                        latency = round((time.time() - start) * 1000, 1)
-                        source["status"] = "connected"
-                        source["last_tested"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-                        self._persist()
-                        return {
-                            "success": True,
-                            "status_code": resp.status_code,
-                            "message": f"Connected via {health_path}",
-                            "latency_ms": latency,
-                        }
-                    except httpx.HTTPError:
+                    except httpx.ConnectError:
+                        last_conn_err = "Connection refused — server unreachable"
+                        continue
+                    except httpx.TimeoutException:
+                        last_conn_err = "Connection timed out"
+                        continue
+                    except httpx.HTTPError as e:
+                        last_conn_err = str(e)
                         continue
 
-                # If no health endpoint, just try root
-                resp = await client.get(base_url, headers=headers)
-                latency = round((time.time() - start) * 1000, 1)
-                source["status"] = "connected"
-                source["last_tested"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-                self._persist()
-                return {
-                    "success": True,
-                    "status_code": resp.status_code,
-                    "message": "Connected (no dedicated health endpoint)",
-                    "latency_ms": latency,
-                }
+                    latency = round((time.time() - start) * 1000, 1)
+                    code = resp.status_code
+                    last_status = code
+                    if 200 <= code < 300:
+                        _record("connected")
+                        return {"success": True, "status_code": code,
+                                "message": f"Connected via {health_path}", "latency_ms": latency}
+                    if code in (401, 403):
+                        _record("failed")
+                        return {"success": False, "status_code": code,
+                                "message": f"Unauthorized (HTTP {code}) — check credentials", "latency_ms": latency}
+                    if code in (404, 405):
+                        continue  # no such endpoint here; try the next path
+                    # Any other 4xx/5xx is a genuine failure.
+                    _record("failed")
+                    return {"success": False, "status_code": code,
+                            "message": f"Server returned HTTP {code}", "latency_ms": latency}
 
-        except httpx.ConnectError:
-            source["status"] = "failed"
-            return {"success": False, "message": "Connection refused — server unreachable"}
-        except httpx.TimeoutException:
-            source["status"] = "failed"
-            return {"success": False, "message": "Connection timed out"}
-        except httpx.HTTPStatusError as e:
-            source["status"] = "failed"
-            return {"success": False, "status_code": e.response.status_code, "message": str(e)}
+                # No path returned 2xx.
+                latency = round((time.time() - start) * 1000, 1)
+                if last_status is not None:
+                    # Every path was 404/405 (we continued past them) and none returned
+                    # 401/403 or a non-404 error — so the server IS reachable and speaking
+                    # HTTP, it just has no health/root endpoint (the mock SAP/MES APIs are
+                    # like this). Treat as connected.
+                    _record("connected")
+                    return {"success": True, "status_code": last_status,
+                            "message": "Connected (no dedicated health endpoint)", "latency_ms": latency}
+                _record("failed")
+                return {"success": False, "message": last_conn_err or "Connection failed", "latency_ms": latency}
         except Exception as e:
-            source["status"] = "failed"
+            _record("failed")
             return {"success": False, "message": str(e)}
 
 

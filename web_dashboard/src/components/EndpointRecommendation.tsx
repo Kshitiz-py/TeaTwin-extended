@@ -16,6 +16,20 @@ interface EndpointRecommendationProps {
 
 const CONF_COLOR: Record<string, string> = { high: '#6ee7b7', medium: '#fbbf24', low: '#f87171' };
 
+function DebugBlock({ title, content, highlight }: { title: string; content: string; highlight?: boolean }) {
+  const border = highlight ? '#3b82f6' : '#334155';
+  return (
+    <div style={{ background: '#0f172a', border: `1px solid ${border}`, borderRadius: 6, overflow: 'hidden' }}>
+      <div style={{ padding: '6px 12px', background: '#1e293b', borderBottom: `1px solid ${border}`, fontSize: 11, color: highlight ? '#93c5fd' : '#94a3b8' }}>
+        {title}
+      </div>
+      <pre style={{ padding: 12, margin: 0, overflow: 'auto', maxHeight: 400, color: '#e2e8f0', fontSize: 11, fontFamily: '"Fira Code","Cascadia Code","JetBrains Mono",monospace', lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+        {content}
+      </pre>
+    </div>
+  );
+}
+
 /**
  * "Recommend endpoints" panel: calls the LLM-over-RAG recommender (metadata only)
  * to propose a covering set of OData endpoints for a CMSD entity, then lets the user
@@ -26,6 +40,7 @@ export default function EndpointRecommendation({ sourceId, cmsdEntity, onApprove
   const [rec, setRec] = useState<RecommendResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showDebug, setShowDebug] = useState(false);
 
   const recommend = async () => {
     if (!cmsdEntity) return;
@@ -113,6 +128,48 @@ export default function EndpointRecommendation({ sourceId, cmsdEntity, onApprove
             </div>
           )}
           {rec.notes && <div style={{ color: '#64748b', fontSize: 11, marginTop: 4 }}>{rec.notes}</div>}
+          {rec.debug && (
+            <div style={{ marginTop: 8 }}>
+              <button
+                onClick={() => setShowDebug(!showDebug)}
+                style={{ padding: '6px 12px', background: '#1e293b', border: '1px solid #334155', borderRadius: 6, color: '#94a3b8', cursor: 'pointer', fontSize: 11, display: 'flex', alignItems: 'center', gap: 6, width: '100%' }}
+              >
+                <span>{showDebug ? '▲' : '▼'}</span>
+                <span>🔍 View LLM prompt &amp; debug</span>
+                <span style={{ marginLeft: 'auto', color: '#64748b', fontSize: 10 }}>{rec.debug.provider}/{rec.debug.model}</span>
+              </button>
+              {showDebug && (
+                <div style={{ marginTop: 4, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div style={{ fontSize: 11, color: '#94a3b8', padding: '4px 8px' }}>
+                    Model: <span style={{ color: '#a78bfa', fontFamily: 'monospace' }}>{rec.debug.provider}/{rec.debug.model}</span>
+                  </div>
+                  <DebugBlock title="System prompt" content={rec.debug.system_prompt} />
+                  <DebugBlock title="User prompt (sent to LLM)" content={rec.debug.user_prompt} highlight />
+                  <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 6, overflow: 'hidden' }}>
+                    <div style={{ padding: '6px 12px', background: '#1e293b', borderBottom: '1px solid #334155', fontSize: 11, color: '#94a3b8' }}>
+                      Phase-1 retrieval candidates (per CMSD field)
+                    </div>
+                    <div style={{ padding: 8 }}>
+                      {Object.entries(rec.debug.candidates).map(([fname, hits]) => (
+                        <div key={fname} style={{ marginBottom: 6 }}>
+                          <div style={{ fontSize: 11, color: '#93c5fd', fontFamily: 'monospace' }}>
+                            {fname} ({hits.length} hit{hits.length !== 1 ? 's' : ''})
+                          </div>
+                          {hits.map((h, i) => (
+                            <div key={i} style={{ fontSize: 11, color: '#cbd5e1', paddingLeft: 12, fontFamily: 'monospace' }}>
+                              <span style={{ color: '#fbbf24' }}>{h.score.toFixed(3)}</span>
+                              {' '}{h.entity_set} — {h.content.slice(0, 200)}{h.content.length > 200 ? '…' : ''}
+                            </div>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <DebugBlock title="Raw LLM response" content={rec.debug.raw_response} />
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

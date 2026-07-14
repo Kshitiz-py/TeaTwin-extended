@@ -130,7 +130,29 @@ class EndpointRecommender:
             user_prompt=user_prompt,
             temperature=0.1,
         )
-        return self._parse_recommendation(raw, cmsd_entity)
+        rec = self._parse_recommendation(raw, cmsd_entity)
+
+        # Attach metadata-only debug info so the UI can show the exact prompt sent to
+        # the LLM (precision diagnostics). hasattr guard: the test FakeLLM has no
+        # get_config(); the production llm_client does. Safe to attach: the system
+        # prompt's JSON contract has no "debug" key, so this never collides with LLM
+        # output, and we attach it after _parse_recommendation.
+        cfg = llm.get_config() if hasattr(llm, "get_config") else {}
+        rec["debug"] = {
+            "system_prompt": COVERING_SET_SYSTEM_PROMPT,
+            "user_prompt": user_prompt,
+            "candidates": candidates,  # full per-field Phase-1 hits (all, not just top-3)
+            "raw_response": raw if isinstance(raw, str) else json.dumps(raw, indent=2, default=str),
+            "model": cfg.get("chat_model", "unknown"),
+            "provider": cfg.get("provider_type", "unknown"),
+        }
+        n_candidates = sum(len(v) for v in candidates.values())
+        logger.info(
+            "recommend: entity=%s provider=%s model=%s fields=%d candidates=%d user_prompt_len=%d",
+            cmsd_entity, cfg.get("provider_type", "?"), cfg.get("chat_model", "?"),
+            len(fields), n_candidates, len(user_prompt),
+        )
+        return rec
 
     # ── helpers ───────────────────────────────────────────────────────────
     @staticmethod
